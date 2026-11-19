@@ -242,7 +242,7 @@ export function AdminDashboard({ catalog, onOpenTvMode }: AdminDashboardProps) {
               className="w-full min-h-[38px] px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white"
             >
               <option value="">Todos</option>
-              {catalog.operators.map((o) => (
+              {(catalog.operators || []).map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.full_name}
                 </option>

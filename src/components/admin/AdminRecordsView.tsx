@@ -137,7 +137,7 @@ export function AdminRecordsView({ catalog }: AdminRecordsViewProps) {
             className="min-h-[38px] px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white"
           >
             <option value="">Todos os funcionários</option>
-            {catalog.operators.map((o) => (
+            {(catalog.operators || []).map((o) => (
               <option key={o.id} value={o.id}>
                 {o.full_name}
               </option>

@@ -298,7 +298,7 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
                   onChange={(e) => setOperatorId(e.target.value)}
                   className="w-full min-h-[46px] px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 >
-                  {catalog.operators.filter((o) => o.is_active).map((o) => (
+                  {(catalog.operators || []).filter((o) => o.is_active).map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.full_name}
                     </option>

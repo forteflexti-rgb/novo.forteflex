@@ -208,12 +208,13 @@ export const api = {
 
   getCatalog: async (): Promise<CatalogData> => {
     if (isSupabaseConfigured && supabase) {
-      const [sectorsRes, linesRes, productsRes, shiftsRes, goalsRes] = await Promise.all([
+      const [sectorsRes, linesRes, productsRes, shiftsRes, goalsRes, operatorsRes] = await Promise.all([
         supabase.from('sectors').select('*').order('name'),
         supabase.from('production_lines').select('*').order('name'),
         supabase.from('products').select('*').order('name'),
         supabase.from('shifts').select('*').order('start_time'),
         supabase.from('production_goals').select('*'),
+        supabase.from('profiles').select('id, full_name, username, role, sector_id, is_active').order('full_name'),
       ]);
 
       return {
@@ -222,6 +223,7 @@ export const api = {
         products: (productsRes.data || []) as Product[],
         shifts: (shiftsRes.data || []) as Shift[],
         goals: (goalsRes.data || []) as ProductionGoal[],
+        operators: (operatorsRes.data || []) as any[],
       };
     }
 
@@ -406,12 +408,19 @@ export const api = {
       const productMap = new Map<string, { planned: number; realized: number }>();
       const downtimeReasonMap = new Map<string, { minutes: number; occurrences: number }>();
 
+      let demoRecordsCount = 0;
+
       for (const r of records) {
+        if (!filters.includeDemo && r.is_demo) {
+          continue;
+        }
+
         plannedTotal += r.planned_quantity;
         realizedTotal += r.produced_quantity;
         approvedTotal += r.approved_quantity;
         lossesTotal += r.loss_quantity;
         totalDowntimeMinutes += r.total_downtime_minutes || 0;
+        if (r.is_demo) demoRecordsCount++;
 
         if (r.production_date === todayStr) {
           todayTotal += r.produced_quantity;
@@ -470,81 +479,99 @@ export const api = {
       }
 
       const goalAttainmentPercent = plannedTotal > 0 ? (realizedTotal / plannedTotal) * 100 : 0;
-      const scrapLossPercent = (producedTotal: number, losses: number) => {
-        const total = producedTotal + losses;
-        return total > 0 ? (losses / total) * 100 : 0;
-      };
+      const lossPercent = realizedTotal > 0 ? (lossesTotal / realizedTotal) * 100 : 0;
+
+      let productiveEfficiencyPercent = 0;
+      if (records.length > 0 && plannedTotal > 0 && realizedTotal > 0) {
+        const scheduledMinutes = records.length * 480;
+        const availability = Math.max(0, (scheduledMinutes - totalDowntimeMinutes) / scheduledMinutes);
+        const quality = Math.min(1, approvedTotal / realizedTotal);
+        const performance = Math.min(1.15, realizedTotal / plannedTotal);
+        productiveEfficiencyPercent = Math.min(100, availability * quality * performance * 100);
+      }
 
       const dailyProduction = Array.from(dailyMap.entries())
-        .map(([date, val]) => ({
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, v]) => ({
           date,
-          planned: Number(val.planned.toFixed(2)),
-          realized: Number(val.realized.toFixed(2)),
-          approved: Number(val.approved.toFixed(2)),
-          losses: Number(val.losses.toFixed(2)),
-        }))
-        .sort((a, b) => a.date.localeCompare(b.date));
+          planned: Math.round(v.planned),
+          realized: Math.round(v.realized),
+          approved: Math.round(v.approved),
+        }));
 
-      const shiftPerformance = Array.from(shiftMap.entries()).map(([shift, val]) => ({
-        shift,
-        planned: Number(val.planned.toFixed(2)),
-        realized: Number(val.realized.toFixed(2)),
-        losses: Number(val.losses.toFixed(2)),
-        lossRate: Number(scrapLossPercent(val.realized, val.losses).toFixed(2)),
+      const lossEvolution = Array.from(dailyMap.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, v]) => ({
+          date,
+          losses: Math.round(v.losses),
+          lossPercent: v.realized > 0 ? Number(((v.losses / v.realized) * 100).toFixed(2)) : 0,
+        }));
+
+      const byShift = Array.from(shiftMap.entries()).map(([name, v]) => ({
+        name,
+        planned: Math.round(v.planned),
+        realized: Math.round(v.realized),
+        losses: Math.round(v.losses),
       }));
 
-      const sectorComparison = Array.from(sectorMap.entries()).map(([sector, val]) => ({
-        sector,
-        planned: Number(val.planned.toFixed(2)),
-        realized: Number(val.realized.toFixed(2)),
-        losses: Number(val.losses.toFixed(2)),
+      const bySector = Array.from(sectorMap.entries()).map(([name, v]) => ({
+        name,
+        planned: Math.round(v.planned),
+        realized: Math.round(v.realized),
+        losses: Math.round(v.losses),
       }));
 
-      const topDowntimeReasons = Array.from(downtimeReasonMap.entries())
-        .map(([reason, val]) => ({
+      const byEmployee = Array.from(employeeMap.entries()).map(([name, v]) => ({
+        name,
+        realized: Math.round(v.realized),
+        approved: Math.round(v.approved),
+        losses: Math.round(v.losses),
+      }));
+
+      const byProduct = Array.from(productMap.entries()).map(([name, v]) => ({
+        name,
+        planned: Math.round(v.planned),
+        realized: Math.round(v.realized),
+      }));
+
+      const plannedVsActual = bySector.map((s) => ({
+        label: s.name,
+        planned: s.planned,
+        realized: s.realized,
+      }));
+
+      const downtimeReasons = Array.from(downtimeReasonMap.entries())
+        .map(([reason, v]) => ({
           reason,
-          minutes: val.minutes,
-          occurrences: val.occurrences,
+          minutes: v.minutes,
+          occurrences: v.occurrences,
         }))
-        .sort((a, b) => b.minutes - a.minutes)
-        .slice(0, 5);
-
-      const employeeRankings = Array.from(employeeMap.entries())
-        .map(([employee, val]) => ({
-          employee,
-          realized: Number(val.realized.toFixed(2)),
-          approved: Number(val.approved.toFixed(2)),
-          losses: Number(val.losses.toFixed(2)),
-          scrapPercent: Number(scrapLossPercent(val.realized, val.losses).toFixed(2)),
-        }))
-        .sort((a, b) => b.realized - a.realized);
-
-      const productRankings = Array.from(productMap.entries())
-        .map(([product, val]) => ({
-          product,
-          planned: Number(val.planned.toFixed(2)),
-          realized: Number(val.realized.toFixed(2)),
-        }))
-        .sort((a, b) => b.realized - a.realized);
+        .sort((a, b) => b.minutes - a.minutes);
 
       return {
-        cards: {
-          todayProduction: Number(todayTotal.toFixed(2)),
-          monthProduction: Number(monthTotal.toFixed(2)),
-          activeLossRate: Number(scrapLossPercent(realizedTotal, lossesTotal).toFixed(2)),
+        kpis: {
+          todayProduction: Math.round(todayTotal),
+          monthProduction: Math.round(monthTotal),
+          plannedTotal: Math.round(plannedTotal),
+          realizedTotal: Math.round(realizedTotal),
           goalAttainmentPercent: Number(goalAttainmentPercent.toFixed(1)),
-          totalDowntimeHours: Number((totalDowntimeMinutes / 60).toFixed(1)),
-          activeAlertsCount: topDowntimeReasons.length,
-          totalRecordsCount: records.length,
-          demoRecordsCount: records.filter((r) => r.is_demo).length,
+          lossesTotal: Math.round(lossesTotal),
+          lossPercent: Number(lossPercent.toFixed(2)),
+          totalDowntimeMinutes,
+          productiveEfficiencyPercent: Number(productiveEfficiencyPercent.toFixed(1)),
+          recordsCount: records.length,
+          demoRecordsCount,
         },
-        dailyProduction,
-        shiftPerformance,
-        sectorComparison,
-        topDowntimeReasons,
-        employeeRankings,
-        productRankings,
-        goals: catalog.goals,
+        charts: {
+          dailyProduction,
+          byShift,
+          bySector,
+          byEmployee,
+          byProduct,
+          plannedVsActual,
+          lossEvolution,
+          downtimeReasons,
+        },
       };
     }
 
