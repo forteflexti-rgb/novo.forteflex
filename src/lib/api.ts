@@ -74,19 +74,17 @@ export const api = {
 
   login: async (identifier: string, password: string) => {
     if (isSupabaseConfigured && supabase) {
-      let email = identifier.trim();
+      let email = identifier.trim().toLowerCase();
 
-      // Se for username sem @, busca o e-mail correspondente na tabela profiles
+      // Se for username sem @, converte para o e-mail corporativo ou busca na tabela
       if (!email.includes('@')) {
         const { data: profile } = await supabase
           .from('profiles')
           .select('email')
           .eq('username', email)
-          .single();
+          .maybeSingle();
 
-        if (profile?.email) {
-          email = profile.email;
-        }
+        email = profile?.email || `${email}@forteflex.com.br`;
       }
 
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -185,16 +183,14 @@ export const api = {
 
   recoverPassword: async (identifier: string) => {
     if (isSupabaseConfigured && supabase) {
-      let email = identifier.trim();
+      let email = identifier.trim().toLowerCase();
       if (!email.includes('@')) {
         const { data: profile } = await supabase
           .from('profiles')
           .select('email')
           .eq('username', email)
-          .single();
-        if (profile?.email) {
-          email = profile.email;
-        }
+          .maybeSingle();
+        email = profile?.email || `${email}@forteflex.com.br`;
       }
 
       await supabase.auth.resetPasswordForEmail(email);
