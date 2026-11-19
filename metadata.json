@@ -1,0 +1,6 @@
+{
+  "name": "novo.forteflex",
+  "description": "Plataforma industrial para registro de dados de produção, controle de paradas, gestão de usuários e dashboards gerenciais.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
