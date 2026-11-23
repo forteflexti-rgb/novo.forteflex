@@ -1,5 +1,5 @@
 import React from 'react';
-import { usePortalConfig } from '../lib/portalConfig';
+import { usePortalConfig, DEFAULT_PORTAL_CONFIG } from '../lib/portalConfig';
 
 interface BrandMarkProps {
   variant?: 'light' | 'dark';
@@ -9,7 +9,8 @@ interface BrandMarkProps {
 
 export function BrandMark({ variant = 'dark', size = 'md' }: BrandMarkProps) {
   const config = usePortalConfig();
-  const logoSrc = config.logoUrl || '/forteflex-logo.png';
+  const safeConfig = config || DEFAULT_PORTAL_CONFIG;
+  const logoSrc = safeConfig.logoUrl || '/forteflex-logo.png';
 
   const imgHeight =
     size === 'lg' ? 'h-7 sm:h-8' : size === 'sm' ? 'h-5 sm:h-5.5' : 'h-6 sm:h-6.5';

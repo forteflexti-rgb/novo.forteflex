@@ -3,13 +3,14 @@ import { Eye, EyeOff, Lock, User, ArrowRight, AlertCircle, CheckCircle2, Factory
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import { BrandMark } from './BrandMark';
-import { usePortalConfig } from '../lib/portalConfig';
+import { usePortalConfig, DEFAULT_PORTAL_CONFIG } from '../lib/portalConfig';
 
 const FACILITY_IMAGE = '/src/assets/images/forteflex_industrial_facility_1795090606698.jpg';
 
 export function LoginScreen() {
   const { login } = useAuth();
-  const { config: portalConfig } = usePortalConfig();
+  const config = usePortalConfig();
+  const portalConfig = config || DEFAULT_PORTAL_CONFIG;
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -115,10 +116,10 @@ export function LoginScreen() {
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6 border-t border-white/15 text-slate-100">
-            {portalConfig.pillars.map((pillar, idx) => (
+            {(portalConfig.pillars || DEFAULT_PORTAL_CONFIG.pillars).map((pillar, idx) => (
               <div key={idx}>
-                <div className="text-xs text-teal-300 mb-1">{pillar.category}</div>
-                <div className="text-sm font-medium">{pillar.title}</div>
+                <div className="text-xs text-teal-300 mb-1">{pillar.title}</div>
+                <div className="text-sm font-medium">{pillar.subtitle}</div>
               </div>
             ))}
           </div>

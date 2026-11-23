@@ -19,6 +19,7 @@ import { AdminCatalogView } from './components/admin/AdminCatalogView';
 import { AdminImportsView } from './components/admin/AdminImportsView';
 import { AdminSettingsView } from './components/admin/AdminSettingsView';
 import { TvProjectionView } from './components/admin/TvProjectionView';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { AlertCircle } from 'lucide-react';
 
 function Workspace() {
@@ -138,8 +139,10 @@ function Workspace() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <Workspace />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <Workspace />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

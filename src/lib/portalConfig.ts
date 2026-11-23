@@ -37,15 +37,21 @@ const EVENT_NAME = 'forteflex_portal_config_change';
 
 export function getPortalConfig(): PortalConfig {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
     if (!raw) return DEFAULT_PORTAL_CONFIG;
     const parsed = JSON.parse(raw);
     return {
-      ...DEFAULT_PORTAL_CONFIG,
-      ...parsed,
-      pillars: Array.isArray(parsed.pillars) && parsed.pillars.length === 3
-        ? parsed.pillars
-        : DEFAULT_PORTAL_CONFIG.pillars,
+      logoUrl: parsed.logoUrl || DEFAULT_PORTAL_CONFIG.logoUrl,
+      companyName: parsed.companyName || DEFAULT_PORTAL_CONFIG.companyName,
+      tagline: parsed.tagline || DEFAULT_PORTAL_CONFIG.tagline,
+      heading: parsed.heading || DEFAULT_PORTAL_CONFIG.heading,
+      description: parsed.description || DEFAULT_PORTAL_CONFIG.description,
+      accentColor: parsed.accentColor || DEFAULT_PORTAL_CONFIG.accentColor,
+      pillars:
+        Array.isArray(parsed.pillars) && parsed.pillars.length === 3
+          ? parsed.pillars
+          : DEFAULT_PORTAL_CONFIG.pillars,
+      updatedAt: parsed.updatedAt,
     };
   } catch {
     return DEFAULT_PORTAL_CONFIG;
@@ -113,5 +119,5 @@ export function usePortalConfig(): PortalConfig {
     };
   }, []);
 
-  return config;
+  return config || DEFAULT_PORTAL_CONFIG;
 }

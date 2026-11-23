@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { BrandMark } from './BrandMark';
-import { usePortalConfig } from '../lib/portalConfig';
+import { usePortalConfig, DEFAULT_PORTAL_CONFIG } from '../lib/portalConfig';
 
 export type AppRoute =
   | 'production-entry'
@@ -56,7 +56,8 @@ const ROUTE_TITLES: Record<AppRoute, { section: string; title: string }> = {
 
 export function LayoutShell({ activeRoute, onNavigate, children }: LayoutShellProps) {
   const { user, logout } = useAuth();
-  const { config: portalConfig } = usePortalConfig();
+  const config = usePortalConfig();
+  const portalConfig = config || DEFAULT_PORTAL_CONFIG;
   const [mobileOpen, setMobileOpen] = useState(false);
 
   if (!user) return null;
