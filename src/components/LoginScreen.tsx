@@ -298,8 +298,24 @@ export function LoginScreen() {
                     onClick={() => fillDemoAccount('carlos.silva', 'Prod@2026')}
                     className="text-left p-2.5 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors cursor-pointer"
                   >
-                    <div className="font-semibold text-[#0f2544]">Produção (Operador)</div>
+                    <div className="font-semibold text-[#0f2544]">Extrusão (Operador)</div>
                     <div className="font-mono text-[11px] text-slate-600 mt-0.5">carlos.silva / Prod@2026</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fillDemoAccount('mariana.costa', 'Prod@2026')}
+                    className="text-left p-2.5 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                  >
+                    <div className="font-semibold text-[#0f2544]">Corte e Solda (Operador)</div>
+                    <div className="font-mono text-[11px] text-slate-600 mt-0.5">mariana.costa / Prod@2026</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fillDemoAccount('joao.santos', 'Prod@2026')}
+                    className="text-left p-2.5 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                  >
+                    <div className="font-semibold text-[#0f2544]">Impressão (Operador)</div>
+                    <div className="font-mono text-[11px] text-slate-600 mt-0.5">joao.santos / Prod@2026</div>
                   </button>
                 </div>
               </div>

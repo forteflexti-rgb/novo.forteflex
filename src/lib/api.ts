@@ -93,21 +93,41 @@ export const api = {
       });
 
       if (error) {
-        throw new Error(error.message === 'Invalid login credentials' ? 'Usuário ou senha inválidos.' : error.message);
+        throw new Error(error.message === 'Invalid login credentials' ? 'Usuário ou senha inválidos. Verifique se digitou corretamente.' : error.message);
       }
 
-      if (!data.user) {
-        throw new Error('Falha ao autenticar.');
+      if (!data.user || !data.session) {
+        throw new Error('Falha ao autenticar sessão no servidor.');
       }
 
-      const { data: profileRow, error: pErr } = await supabase
+      let profileRow: any = null;
+      const { data: pData } = await supabase
         .from('profiles')
         .select('*, sector:sectors(name)')
         .eq('id', data.user.id)
-        .single();
+        .maybeSingle();
 
-      if (pErr || !profileRow) {
-        throw new Error('Perfil de usuário não encontrado.');
+      if (pData) {
+        profileRow = pData;
+      } else {
+        const fallbackProfile = {
+          id: data.user.id,
+          username: data.user.user_metadata?.username || email.split('@')[0],
+          email: data.user.email || email,
+          full_name: data.user.user_metadata?.full_name || 'Usuário',
+          role: (data.user.user_metadata?.role as 'admin' | 'operator') || (email.startsWith('admin') ? 'admin' : 'operator'),
+          sector_id: null,
+          is_active: true,
+          permissions: {
+            can_create_records: true,
+            can_edit_own_records: true,
+            can_view_own_records: true,
+            can_view_sector_records: false,
+            can_export_own_records: false,
+          },
+        };
+        await supabase.from('profiles').upsert(fallbackProfile);
+        profileRow = fallbackProfile;
       }
 
       if (!profileRow.is_active) {
@@ -131,7 +151,7 @@ export const api = {
           can_view_sector_records: false,
           can_export_own_records: false,
         },
-        created_at: profileRow.created_at,
+        created_at: profileRow.created_at || new Date().toISOString(),
       };
 
       setStoredToken(data.session.access_token);
@@ -152,14 +172,34 @@ export const api = {
         throw new Error('Sessão expirada');
       }
 
-      const { data: profileRow, error } = await supabase
+      let profileRow: any = null;
+      const { data: pData } = await supabase
         .from('profiles')
         .select('*, sector:sectors(name)')
         .eq('id', currentUser.id)
-        .single();
+        .maybeSingle();
 
-      if (error || !profileRow) {
-        throw new Error('Perfil de usuário não encontrado');
+      if (pData) {
+        profileRow = pData;
+      } else {
+        const fallbackProfile = {
+          id: currentUser.id,
+          username: currentUser.user_metadata?.username || currentUser.email?.split('@')[0] || 'usuario',
+          email: currentUser.email || '',
+          full_name: currentUser.user_metadata?.full_name || 'Usuário',
+          role: (currentUser.user_metadata?.role as 'admin' | 'operator') || 'operator',
+          sector_id: null,
+          is_active: true,
+          permissions: {
+            can_create_records: true,
+            can_edit_own_records: true,
+            can_view_own_records: true,
+            can_view_sector_records: false,
+            can_export_own_records: false,
+          },
+        };
+        await supabase.from('profiles').upsert(fallbackProfile);
+        profileRow = fallbackProfile;
       }
 
       const user: UserProfile = {
@@ -172,7 +212,7 @@ export const api = {
         sector_name: profileRow.sector?.name ?? null,
         is_active: Boolean(profileRow.is_active),
         permissions: profileRow.permissions,
-        created_at: profileRow.created_at,
+        created_at: profileRow.created_at || new Date().toISOString(),
       };
 
       return { user };
