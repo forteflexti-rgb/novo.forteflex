@@ -3,11 +3,13 @@ import { Eye, EyeOff, Lock, User, ArrowRight, AlertCircle, CheckCircle2, Factory
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import { BrandMark } from './BrandMark';
+import { usePortalConfig } from '../lib/portalConfig';
 
 const FACILITY_IMAGE = '/src/assets/images/forteflex_industrial_facility_1795090606698.jpg';
 
 export function LoginScreen() {
   const { login } = useAuth();
+  const { config: portalConfig } = usePortalConfig();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -70,7 +72,10 @@ export function LoginScreen() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row">
       {/* Left Institutional Visual Column */}
-      <div className="relative lg:w-[46%] min-h-[240px] lg:min-h-screen bg-[#0a3832] overflow-hidden flex flex-col justify-between p-8 lg:p-12">
+      <div
+        className="relative lg:w-[46%] min-h-[240px] lg:min-h-screen overflow-hidden flex flex-col justify-between p-8 lg:p-12"
+        style={{ backgroundColor: portalConfig.accentColor }}
+      >
         {!imgFailed ? (
           <img
             src={FACILITY_IMAGE}
@@ -80,11 +85,16 @@ export function LoginScreen() {
             className="absolute inset-0 w-full h-full object-cover opacity-55"
           />
         ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-[#042420] via-[#0a3832] to-[#0f4f46] flex items-center justify-center opacity-40">
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-40">
             <Factory className="w-32 h-32 text-teal-300/30" />
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#042420]/95 via-[#0a3832]/75 to-[#0a3832]/60" />
+        <div
+          className="absolute inset-0"
+          style={{
+            background: `linear-gradient(to top, ${portalConfig.accentColor}f5, ${portalConfig.accentColor}cc, ${portalConfig.accentColor}99)`,
+          }}
+        />
 
         <div className="relative z-10">
           <BrandMark variant="light" size="lg" />
@@ -92,31 +102,25 @@ export function LoginScreen() {
 
         <div className="relative z-10 max-w-lg mt-12 lg:mt-0">
           <p className="text-xs font-medium tracking-wide text-teal-300 mb-3">
-            Plataforma de Gestão Industrial
+            {portalConfig.tagline}
           </p>
           <h1
             className="text-2xl sm:text-3xl lg:text-4xl font-display font-bold text-white leading-tight mb-4"
             style={{ textWrap: 'balance' }}
           >
-            Do apontamento em linha aos indicadores gerenciais em tempo real.
+            {portalConfig.heading}
           </h1>
           <p className="text-sm sm:text-base text-slate-200/90 leading-relaxed mb-8">
-            Registre produção por turno, controle refugos e motivos de parada e acompanhe metas com rastreabilidade completa por operador e setor.
+            {portalConfig.description}
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6 border-t border-white/15 text-slate-100">
-            <div>
-              <div className="text-xs text-teal-300 mb-1">Chão de Fábrica</div>
-              <div className="text-sm font-medium">Lançamento guiado</div>
-            </div>
-            <div>
-              <div className="text-xs text-teal-300 mb-1">Rastreabilidade</div>
-              <div className="text-sm font-medium">Auditoria por usuário</div>
-            </div>
-            <div>
-              <div className="text-xs text-teal-300 mb-1">Gestão</div>
-              <div className="text-sm font-medium">Dashboards &amp; Excel</div>
-            </div>
+            {portalConfig.pillars.map((pillar, idx) => (
+              <div key={idx}>
+                <div className="text-xs text-teal-300 mb-1">{pillar.category}</div>
+                <div className="text-sm font-medium">{pillar.title}</div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -220,7 +224,8 @@ export function LoginScreen() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full min-h-[46px] mt-2 px-4 py-2.5 bg-teal-700 hover:bg-teal-800 disabled:bg-teal-400 text-white font-medium text-sm rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                style={{ backgroundColor: submitting ? undefined : portalConfig.accentColor }}
+                className="w-full min-h-[46px] mt-2 px-4 py-2.5 bg-teal-700 hover:opacity-95 disabled:bg-teal-400 text-white font-medium text-sm rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-sm"
               >
                 <span>{submitting ? 'Autenticando...' : 'Entrar no sistema'}</span>
                 {!submitting && <ArrowRight className="w-4 h-4" />}

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { BrandMark } from './BrandMark';
+import { usePortalConfig } from '../lib/portalConfig';
 
 export type AppRoute =
   | 'production-entry'
@@ -55,6 +56,7 @@ const ROUTE_TITLES: Record<AppRoute, { section: string; title: string }> = {
 
 export function LayoutShell({ activeRoute, onNavigate, children }: LayoutShellProps) {
   const { user, logout } = useAuth();
+  const { config: portalConfig } = usePortalConfig();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   if (!user) return null;
@@ -100,7 +102,8 @@ export function LayoutShell({ activeRoute, onNavigate, children }: LayoutShellPr
 
       {/* Institutional Sea Green / Teal Sidebar */}
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-[#0a3832] text-slate-100 flex flex-col shrink-0 transition-transform duration-200 shadow-xl lg:shadow-none border-r border-[#082e29] ${
+        style={{ backgroundColor: portalConfig.accentColor }}
+        className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-[#0a3832] text-slate-100 flex flex-col shrink-0 transition-transform duration-200 shadow-xl lg:shadow-none border-r border-black/15 ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
