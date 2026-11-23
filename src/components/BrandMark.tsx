@@ -6,9 +6,9 @@ interface BrandMarkProps {
 }
 
 export function BrandMark({ variant = 'dark', size = 'md' }: BrandMarkProps) {
-  const textColor = variant === 'light' ? 'text-white' : 'text-[#0f2544]';
-  const dotColor = variant === 'light' ? 'text-blue-400' : 'text-blue-600';
-  const iconBox = variant === 'light' ? 'bg-blue-500/20 border-blue-400/30 text-blue-300' : 'bg-[#0f2544] border-[#0f2544] text-white';
+  const textColor = variant === 'light' ? 'text-white' : 'text-[#0a3832]';
+  const dotColor = variant === 'light' ? 'text-teal-300' : 'text-teal-600';
+  const iconBox = variant === 'light' ? 'bg-teal-500/25 border-teal-400/30 text-teal-200' : 'bg-[#0a3832] border-[#0a3832] text-teal-300';
 
   const textSize =
     size === 'lg' ? 'text-2xl' : size === 'sm' ? 'text-base' : 'text-xl';

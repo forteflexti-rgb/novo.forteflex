@@ -98,19 +98,19 @@ export function LayoutShell({ activeRoute, onNavigate, children }: LayoutShellPr
         />
       )}
 
-      {/* Institutional Navy Sidebar */}
+      {/* Institutional Sea Green / Teal Sidebar */}
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-[#0f2544] text-slate-100 flex flex-col shrink-0 transition-transform duration-200 ${
+        className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-[#0a3832] text-slate-100 flex flex-col shrink-0 transition-transform duration-200 shadow-xl lg:shadow-none border-r border-[#082e29] ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
-        <div className="h-16 px-5 flex items-center justify-between border-b border-white/10 shrink-0">
+        <div className="h-16 px-5 flex items-center justify-between border-b border-teal-500/15 shrink-0 bg-[#082e29]/40">
           <BrandMark variant="light" size="md" />
           <button
             type="button"
             onClick={() => setMobileOpen(false)}
             aria-label="Fechar menu"
-            className="lg:hidden p-1.5 text-slate-300 hover:text-white rounded-md"
+            className="lg:hidden p-1.5 text-teal-200 hover:text-white rounded-md"
           >
             <X className="w-5 h-5" />
           </button>
@@ -127,20 +127,20 @@ export function LayoutShell({ activeRoute, onNavigate, children }: LayoutShellPr
                 onClick={() => handleSelect(item.id)}
                 className={`w-full min-h-[42px] px-3.5 py-2.5 rounded-lg flex items-center gap-3 text-sm font-medium transition-colors whitespace-nowrap cursor-pointer ${
                   active
-                    ? 'bg-blue-600 text-white'
-                    : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                    ? 'bg-teal-600 text-white shadow-sm shadow-teal-950/40'
+                    : 'text-teal-100/80 hover:bg-white/10 hover:text-white'
                 }`}
               >
-                <Icon className="w-4 h-4 shrink-0" />
+                <Icon className="w-4 h-4 shrink-0 text-teal-300" />
                 <span className="truncate">{item.label}</span>
               </button>
             );
           })}
         </nav>
 
-        <div className="p-4 border-t border-white/10 text-xs text-slate-300 space-y-1">
+        <div className="p-4 border-t border-teal-500/15 bg-[#082e29]/50 text-xs text-teal-100/80 space-y-1">
           <div className="font-medium text-white truncate">{user.full_name}</div>
-          <div className="text-slate-400 truncate">
+          <div className="text-teal-300/80 truncate">
             {isAdmin ? 'Administrador da Empresa' : 'Operador de Produção'}
             {user.sector_name ? ` · ${user.sector_name}` : ''}
           </div>
@@ -177,7 +177,7 @@ export function LayoutShell({ activeRoute, onNavigate, children }: LayoutShellPr
               <button
                 type="button"
                 onClick={() => handleSelect('admin-tv')}
-                className="min-h-[38px] px-3.5 py-1.5 rounded-lg bg-[#0f2544] hover:bg-[#17345e] text-white text-xs font-medium inline-flex items-center gap-2 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                className="min-h-[38px] px-3.5 py-1.5 rounded-lg bg-[#0a3832] hover:bg-[#0f4f46] text-white text-xs font-medium inline-flex items-center gap-2 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
                 <Tv className="w-3.5 h-3.5" />
                 <span>Projetar na TV</span>

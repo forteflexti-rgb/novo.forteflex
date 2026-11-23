@@ -70,7 +70,7 @@ export function LoginScreen() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row">
       {/* Left Institutional Visual Column */}
-      <div className="relative lg:w-[46%] min-h-[240px] lg:min-h-screen bg-[#0f2544] overflow-hidden flex flex-col justify-between p-8 lg:p-12">
+      <div className="relative lg:w-[46%] min-h-[240px] lg:min-h-screen bg-[#0a3832] overflow-hidden flex flex-col justify-between p-8 lg:p-12">
         {!imgFailed ? (
           <img
             src={FACILITY_IMAGE}
@@ -80,18 +80,18 @@ export function LoginScreen() {
             className="absolute inset-0 w-full h-full object-cover opacity-55"
           />
         ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-[#09172b] via-[#0f2544] to-[#17345e] flex items-center justify-center opacity-40">
-            <Factory className="w-32 h-32 text-blue-300/30" />
+          <div className="absolute inset-0 bg-gradient-to-br from-[#042420] via-[#0a3832] to-[#0f4f46] flex items-center justify-center opacity-40">
+            <Factory className="w-32 h-32 text-teal-300/30" />
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#09172b]/95 via-[#0f2544]/70 to-[#0f2544]/55" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#042420]/95 via-[#0a3832]/75 to-[#0a3832]/60" />
 
         <div className="relative z-10">
           <BrandMark variant="light" size="lg" />
         </div>
 
         <div className="relative z-10 max-w-lg mt-12 lg:mt-0">
-          <p className="text-xs font-medium tracking-wide text-blue-200 mb-3">
+          <p className="text-xs font-medium tracking-wide text-teal-300 mb-3">
             Plataforma de Gestão Industrial
           </p>
           <h1
@@ -106,15 +106,15 @@ export function LoginScreen() {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6 border-t border-white/15 text-slate-100">
             <div>
-              <div className="text-xs text-blue-200 mb-1">Chão de Fábrica</div>
+              <div className="text-xs text-teal-300 mb-1">Chão de Fábrica</div>
               <div className="text-sm font-medium">Lançamento guiado</div>
             </div>
             <div>
-              <div className="text-xs text-blue-200 mb-1">Rastreabilidade</div>
+              <div className="text-xs text-teal-300 mb-1">Rastreabilidade</div>
               <div className="text-sm font-medium">Auditoria por usuário</div>
             </div>
             <div>
-              <div className="text-xs text-blue-200 mb-1">Gestão</div>
+              <div className="text-xs text-teal-300 mb-1">Gestão</div>
               <div className="text-sm font-medium">Dashboards &amp; Excel</div>
             </div>
           </div>
@@ -128,7 +128,7 @@ export function LoginScreen() {
             <div className="lg:hidden mb-5">
               <BrandMark variant="dark" size="md" />
             </div>
-            <h2 className="text-2xl font-display font-bold text-[#0f2544]">
+            <h2 className="text-2xl font-display font-bold text-[#0a3832]">
               {recoveryMode ? 'Recuperar acesso' : 'Acesso ao sistema'}
             </h2>
             <p className="text-sm text-slate-500 mt-1.5">
@@ -173,7 +173,7 @@ export function LoginScreen() {
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
                     placeholder="ex.: carlos.silva ou nome@forteflex.com.br"
-                    className="w-full min-h-[44px] pl-10 pr-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-colors"
+                    className="w-full min-h-[44px] pl-10 pr-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600 transition-colors"
                   />
                 </div>
               </div>
@@ -190,7 +190,7 @@ export function LoginScreen() {
                       setRecoveryMessage(null);
                       setRecoveryMode(true);
                     }}
-                    className="text-xs font-medium text-blue-600 hover:text-blue-700 focus-visible:outline-none focus-visible:underline"
+                    className="text-xs font-medium text-teal-700 hover:text-teal-800 focus-visible:outline-none focus-visible:underline"
                   >
                     Esqueci minha senha
                   </button>
@@ -204,13 +204,13 @@ export function LoginScreen() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Digite sua senha"
-                    className="w-full min-h-[44px] pl-10 pr-11 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-colors"
+                    className="w-full min-h-[44px] pl-10 pr-11 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600 transition-colors"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
                     aria-label={showPassword ? 'Ocultar senha' : 'Visualizar senha'}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-slate-700 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-slate-700 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -220,7 +220,7 @@ export function LoginScreen() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full min-h-[46px] mt-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium text-sm rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                className="w-full min-h-[46px] mt-2 px-4 py-2.5 bg-teal-700 hover:bg-teal-800 disabled:bg-teal-400 text-white font-medium text-sm rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer"
               >
                 <span>{submitting ? 'Autenticando...' : 'Entrar no sistema'}</span>
                 {!submitting && <ArrowRight className="w-4 h-4" />}
@@ -240,7 +240,7 @@ export function LoginScreen() {
                     value={recoveryIdentifier}
                     onChange={(e) => setRecoveryIdentifier(e.target.value)}
                     placeholder="ex.: carlos.silva"
-                    className="w-full min-h-[44px] pl-10 pr-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                    className="w-full min-h-[44px] pl-10 pr-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600"
                   />
                 </div>
               </div>
@@ -249,7 +249,7 @@ export function LoginScreen() {
                 <button
                   type="submit"
                   disabled={recoverySubmitting}
-                  className="flex-1 min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm rounded-lg transition-colors cursor-pointer"
+                  className="flex-1 min-h-[44px] px-4 py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-medium text-sm rounded-lg transition-colors cursor-pointer"
                 >
                   {recoverySubmitting ? 'Enviando...' : 'Solicitar redefinição'}
                 </button>
@@ -273,7 +273,7 @@ export function LoginScreen() {
             <button
               type="button"
               onClick={() => setShowDemoHelper((v) => !v)}
-              className="w-full flex items-center justify-between text-xs font-medium text-slate-600 hover:text-[#0f2544] py-1 cursor-pointer"
+              className="w-full flex items-center justify-between text-xs font-medium text-slate-600 hover:text-[#0a3832] py-1 cursor-pointer"
             >
               <span>Acessos iniciais de demonstração</span>
               <ChevronDown className={`w-4 h-4 transition-transform ${showDemoHelper ? 'rotate-180' : ''}`} />
@@ -288,33 +288,33 @@ export function LoginScreen() {
                   <button
                     type="button"
                     onClick={() => fillDemoAccount('admin', 'Forte@2026')}
-                    className="text-left p-2.5 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                    className="text-left p-2.5 rounded-lg border border-slate-200 hover:border-teal-300 hover:bg-teal-50/50 transition-colors cursor-pointer"
                   >
-                    <div className="font-semibold text-[#0f2544]">Administrador</div>
+                    <div className="font-semibold text-[#0a3832]">Administrador</div>
                     <div className="font-mono text-[11px] text-slate-600 mt-0.5">admin / Forte@2026</div>
                   </button>
                   <button
                     type="button"
                     onClick={() => fillDemoAccount('carlos.silva', 'Prod@2026')}
-                    className="text-left p-2.5 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                    className="text-left p-2.5 rounded-lg border border-slate-200 hover:border-teal-300 hover:bg-teal-50/50 transition-colors cursor-pointer"
                   >
-                    <div className="font-semibold text-[#0f2544]">Extrusão (Operador)</div>
+                    <div className="font-semibold text-[#0a3832]">Extrusão (Operador)</div>
                     <div className="font-mono text-[11px] text-slate-600 mt-0.5">carlos.silva / Prod@2026</div>
                   </button>
                   <button
                     type="button"
                     onClick={() => fillDemoAccount('mariana.costa', 'Prod@2026')}
-                    className="text-left p-2.5 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                    className="text-left p-2.5 rounded-lg border border-slate-200 hover:border-teal-300 hover:bg-teal-50/50 transition-colors cursor-pointer"
                   >
-                    <div className="font-semibold text-[#0f2544]">Corte e Solda (Operador)</div>
+                    <div className="font-semibold text-[#0a3832]">Corte e Solda (Operador)</div>
                     <div className="font-mono text-[11px] text-slate-600 mt-0.5">mariana.costa / Prod@2026</div>
                   </button>
                   <button
                     type="button"
                     onClick={() => fillDemoAccount('joao.santos', 'Prod@2026')}
-                    className="text-left p-2.5 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                    className="text-left p-2.5 rounded-lg border border-slate-200 hover:border-teal-300 hover:bg-teal-50/50 transition-colors cursor-pointer"
                   >
-                    <div className="font-semibold text-[#0f2544]">Impressão (Operador)</div>
+                    <div className="font-semibold text-[#0a3832]">Impressão (Operador)</div>
                     <div className="font-mono text-[11px] text-slate-600 mt-0.5">joao.santos / Prod@2026</div>
                   </button>
                 </div>
