@@ -12,6 +12,7 @@ import {
   seedDemoProductionData,
   clearDemoProductionData,
 } from './server/db.ts';
+import { importIniflexReports, parseIniflexWorkbook } from './server/iniflex.ts';
 
 dotenv.config();
 
@@ -831,7 +832,20 @@ async function startServer() {
       }))
       .sort((a, b) => b.minutes - a.minutes);
 
+    // Meses com produção registrada (atalhos de período no dashboard)
+    const availableMonths = (
+      db
+        .prepare(
+          `SELECT substr(pr.production_date, 1, 7) as month, SUM(pr.produced_quantity) as total
+           FROM production_records pr
+           ${entityFilter.clauses.length > 0 ? `WHERE ${entityFilter.clauses.join(' AND ')}` : ''}
+           GROUP BY month ORDER BY month DESC LIMIT 12`
+        )
+        .all(...entityFilter.params) as Array<{ month: string; total: number }>
+    ).map((m) => ({ month: m.month, total: Math.round(m.total) }));
+
     res.json({
+      availableMonths,
       kpis: {
         todayProduction: Math.round(todayRow.total),
         monthProduction: Math.round(monthRow.total),
@@ -1410,6 +1424,29 @@ async function startServer() {
       duplicates: duplicateCount,
       errors: errorCount,
     });
+  });
+
+  // Relatórios nativos do ERP Iniflex (RPCP622 + RPCP019). commit=false → somente prévia.
+  app.post('/api/admin/imports/iniflex', requireAuth, requireAdmin, (req: AuthenticatedRequest, res) => {
+    const { files, commit } = req.body || {};
+    if (!Array.isArray(files) || files.length === 0) {
+      res.status(400).json({ error: 'Envie o relatório RPCP622 (e opcionalmente o RPCP019) exportados do Iniflex.' });
+      return;
+    }
+    try {
+      const reports = files.map((f: any) =>
+        parseIniflexWorkbook(Buffer.from(String(f.contentBase64 || ''), 'base64'), String(f.name || 'arquivo.xlsx'))
+      );
+      const kinds = reports.map((r) => r.kind);
+      if (new Set(kinds).size !== kinds.length) {
+        res.status(400).json({ error: 'Envie no máximo um arquivo de cada relatório (RPCP622 e RPCP019).' });
+        return;
+      }
+      const summary = importIniflexReports(reports, { commit: Boolean(commit), userId: req.user!.id });
+      res.status(commit ? 201 : 200).json(summary);
+    } catch (err: any) {
+      res.status(400).json({ error: err?.message || 'Falha ao processar os relatórios Iniflex.' });
+    }
   });
 
   // ---------------------------------------------------------------------------

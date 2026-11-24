@@ -11,6 +11,7 @@ import {
 import { api } from '../../lib/api';
 import { downloadImportTemplateExcel, parseSpreadsheetFile } from '../../lib/export';
 import type { ImportBatch, ImportValidationRow } from '../../types';
+import { IniflexReportImport } from './IniflexReportImport';
 
 export function AdminImportsView() {
   const [batches, setBatches] = useState<ImportBatch[]>([]);
@@ -85,6 +86,9 @@ export function AdminImportsView() {
 
   return (
     <div className="space-y-6">
+      {/* Native Iniflex reports (RPCP622 + RPCP019) */}
+      <IniflexReportImport onImported={loadBatches} />
+
       {/* Spreadsheet Import Section */}
       <section className="bg-white border border-slate-200 rounded-xl p-6 space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

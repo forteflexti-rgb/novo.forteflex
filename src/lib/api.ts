@@ -5,6 +5,7 @@ import type {
   DashboardSummary,
   ImportBatch,
   ImportValidationRow,
+  IniflexImportSummary,
   ProductionGoal,
   ProductionLine,
   ProductionRecord,
@@ -866,6 +867,13 @@ export const api = {
     return request<{ rows: ImportValidationRow[] }>('/api/admin/imports/validate', {
       method: 'POST',
       body: JSON.stringify({ rows }),
+    });
+  },
+
+  importIniflexReports: async (payload: { files: Array<{ name: string; contentBase64: string }>; commit: boolean }) => {
+    return request<IniflexImportSummary>('/api/admin/imports/iniflex', {
+      method: 'POST',
+      body: JSON.stringify(payload),
     });
   },
 

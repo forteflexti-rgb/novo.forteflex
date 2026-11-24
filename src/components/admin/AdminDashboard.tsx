@@ -254,23 +254,27 @@ export function AdminDashboard({ catalog, onOpenTvMode }: AdminDashboardProps) {
         {/* Quick Period Selection */}
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
           <span className="text-xs text-slate-500 font-medium mr-1">Períodos rápidos:</span>
-          <button
-            type="button"
-            onClick={() => {
-              setFilters((prev) => ({
-                ...prev,
-                startDate: '2026-10-01',
-                endDate: '2026-10-31',
-              }));
-            }}
-            className={`px-3 py-1 text-xs rounded-lg font-medium transition-colors cursor-pointer border ${
-              filters.startDate === '2026-10-01' && filters.endDate === '2026-10-31'
-                ? 'bg-teal-700 text-white border-teal-700 shadow-sm'
-                : 'bg-teal-50 text-teal-800 border-teal-200 hover:bg-teal-100'
-            }`}
-          >
-            📊 Outubro / 2026 (Oficial Iniflex - 91.821,55 kg)
-          </button>
+          {(summary?.availableMonths || []).slice(0, 6).map(({ month, total }) => {
+            const [y, m] = month.split('-').map(Number);
+            const startDate = `${month}-01`;
+            const endDate = `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+            const active = filters.startDate === startDate && filters.endDate === endDate;
+            const label = new Date(y, m - 1, 1).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
+            return (
+              <button
+                key={month}
+                type="button"
+                onClick={() => setFilters((prev) => ({ ...prev, startDate, endDate }))}
+                className={`px-3 py-1 text-xs rounded-lg font-medium transition-colors cursor-pointer border ${
+                  active
+                    ? 'bg-teal-700 text-white border-teal-700 shadow-sm'
+                    : 'bg-teal-50 text-teal-800 border-teal-200 hover:bg-teal-100'
+                }`}
+              >
+                {label} · {formatNumber(total)} kg
+              </button>
+            );
+          })}
           <button
             type="button"
             onClick={() => setFilters(DEFAULT_FILTERS)}

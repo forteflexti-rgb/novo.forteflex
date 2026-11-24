@@ -141,6 +141,8 @@ export interface DashboardFilters {
 }
 
 export interface DashboardSummary {
+  /** Meses com produção registrada (AAAA-MM), mais recente primeiro. Ausente no modo Supabase. */
+  availableMonths?: Array<{ month: string; total: number }>;
   kpis: {
     todayProduction: number;
     monthProduction: number;
@@ -164,6 +166,27 @@ export interface DashboardSummary {
     lossEvolution: Array<{ date: string; losses: number; lossPercent: number }>;
     downtimeReasons: Array<{ reason: string; minutes: number; occurrences: number }>;
   };
+}
+
+export interface IniflexImportSummary {
+  committed: boolean;
+  batchId: string | null;
+  files: Array<{ filename: string; kind: string }>;
+  periodStart: string;
+  periodEnd: string;
+  apontamentos: number;
+  recordsCreated: number;
+  totalWeightKg: number;
+  reportedTotalWeightKg: number | null;
+  totalLossKg: number;
+  totalDowntimeMinutes: number;
+  replacedRecords: number;
+  otherRecordsInPeriod: number;
+  newProducts: Array<{ sku: string; name: string }>;
+  renamedProducts: number;
+  newLines: string[];
+  byLine: Array<{ line: string; weightKg: number; lossKg: number; downtimeMinutes: number }>;
+  warnings: string[];
 }
 
 export interface ImportBatch {
