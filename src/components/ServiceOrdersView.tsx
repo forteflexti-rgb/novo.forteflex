@@ -110,10 +110,11 @@ export function ServiceOrdersView({ catalog }: ServiceOrdersViewProps) {
         api.getServiceOrders(),
         api.getServiceOrdersSummary(),
       ]);
-      setOrders(resOrders.orders);
-      setSummary(resSummary.summary);
+      setOrders(Array.isArray(resOrders?.orders) ? resOrders.orders : []);
+      setSummary(resSummary?.summary || null);
     } catch (err: any) {
       setError(err.message || 'Erro ao carregar chamados.');
+      setOrders([]);
     } finally {
       setLoading(false);
     }
@@ -124,6 +125,7 @@ export function ServiceOrdersView({ catalog }: ServiceOrdersViewProps) {
   }, []);
 
   const filteredOrders = useMemo(() => {
+    if (!Array.isArray(orders)) return [];
     return orders.filter((o) => {
       if (statusFilter !== 'all' && o.status !== statusFilter) return false;
       if (priorityFilter !== 'all' && o.priority !== priorityFilter) return false;
@@ -131,9 +133,9 @@ export function ServiceOrdersView({ catalog }: ServiceOrdersViewProps) {
       if (sectorFilter !== 'all' && o.sector_id !== sectorFilter) return false;
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase();
-        const matchNum = o.ticket_number.toLowerCase().includes(q);
-        const matchTitle = o.title.toLowerCase().includes(q);
-        const matchDesc = o.description.toLowerCase().includes(q);
+        const matchNum = (o.ticket_number || '').toLowerCase().includes(q);
+        const matchTitle = (o.title || '').toLowerCase().includes(q);
+        const matchDesc = (o.description || '').toLowerCase().includes(q);
         const matchReq = (o.requester_name || '').toLowerCase().includes(q);
         if (!matchNum && !matchTitle && !matchDesc && !matchReq) return false;
       }
@@ -143,7 +145,8 @@ export function ServiceOrdersView({ catalog }: ServiceOrdersViewProps) {
 
   const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim() || !newDescription.trim() || !newSectorId) {
+    const chosenSector = newSectorId || catalog?.sectors?.[0]?.id || '';
+    if (!newTitle.trim() || !newDescription.trim() || !chosenSector) {
       alert('Preencha título, descrição e setor para abrir o chamado.');
       return;
     }
@@ -155,7 +158,7 @@ export function ServiceOrdersView({ catalog }: ServiceOrdersViewProps) {
         description: newDescription.trim(),
         category: newCategory,
         priority: newPriority,
-        sector_id: newSectorId,
+        sector_id: chosenSector,
         line_or_location: newLineOrLocation.trim() || undefined,
       });
       setShowCreateModal(false);
@@ -444,7 +447,12 @@ export function ServiceOrdersView({ catalog }: ServiceOrdersViewProps) {
                   return (
                     <tr
                       key={ord.id}
-                      onClick={() => setSelectedOrder(ord)}
+                      onClick={() =>
+                        setSelectedOrder({
+                          ...ord,
+                          notes: Array.isArray(ord.notes) ? ord.notes : [],
+                        })
+                      }
                       className="hover:bg-slate-50/80 cursor-pointer transition-colors"
                     >
                       <td className="py-3 px-4 whitespace-nowrap">
@@ -508,7 +516,10 @@ export function ServiceOrdersView({ catalog }: ServiceOrdersViewProps) {
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSelectedOrder(ord);
+                            setSelectedOrder({
+                              ...ord,
+                              notes: Array.isArray(ord.notes) ? ord.notes : [],
+                            });
                           }}
                           className="px-3 py-1.5 text-xs font-semibold text-teal-800 bg-teal-50 hover:bg-teal-100 rounded-lg border border-teal-200 transition-colors cursor-pointer"
                         >
@@ -843,11 +854,13 @@ export function ServiceOrdersView({ catalog }: ServiceOrdersViewProps) {
               <div className="space-y-3">
                 <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                   <MessageSquare className="w-3.5 h-3.5 text-teal-700" />
-                  <span>Histórico de Apontamentos Técnicos ({selectedOrder.notes.length})</span>
+                  <span>
+                    Histórico de Apontamentos Técnicos ({Array.isArray(selectedOrder.notes) ? selectedOrder.notes.length : 0})
+                  </span>
                 </h4>
 
                 <div className="space-y-2.5">
-                  {selectedOrder.notes.length === 0 ? (
+                  {!Array.isArray(selectedOrder.notes) || selectedOrder.notes.length === 0 ? (
                     <div className="text-xs text-slate-400 italic p-3 bg-slate-50 border border-slate-200 rounded-lg">
                       Nenhum apontamento adicionado ainda. Use o campo abaixo para registrar atualizações técnicas.
                     </div>

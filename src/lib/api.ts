@@ -55,6 +55,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers,
   });
 
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('text/html')) {
+    throw new Error('Servidor retornou HTML (SPA rewrite). Backend API não disponível nesta rota.');
+  }
+
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     throw new Error(data.error || `Erro na requisição (${response.status})`);
@@ -875,6 +880,51 @@ export const api = {
   // SERVICE ORDERS (ORDENS DE SERVIÇO / CENTRAL DE TI)
   // ---------------------------------------------------------------------------
   getServiceOrders: async (params?: { status?: string; priority?: string; category?: string; sector_id?: string }) => {
+    // 1. Tenta Supabase se configurado
+    if (isSupabaseConfigured && supabase) {
+      try {
+        let q = supabase
+          .from('service_orders')
+          .select('*, sector:sectors(name), requester:profiles!service_orders_requester_id_fkey(full_name, email), assigned_to:profiles!service_orders_assigned_to_id_fkey(full_name)')
+          .order('created_at', { ascending: false });
+
+        if (params?.status) q = q.eq('status', params.status);
+        if (params?.priority) q = q.eq('priority', params.priority);
+        if (params?.category) q = q.eq('category', params.category);
+        if (params?.sector_id) q = q.eq('sector_id', params.sector_id);
+
+        const { data, error } = await q;
+        if (!error && Array.isArray(data)) {
+          const mapped: ServiceOrder[] = data.map((d: any) => ({
+            id: d.id,
+            ticket_number: d.ticket_number,
+            title: d.title,
+            description: d.description,
+            category: d.category,
+            priority: d.priority,
+            status: d.status,
+            sector_id: d.sector_id,
+            sector_name: d.sector?.name || 'Geral',
+            line_or_location: d.line_or_location,
+            requester_id: d.requester_id,
+            requester_name: d.requester?.full_name || 'Usuário',
+            requester_email: d.requester?.email,
+            assigned_to_id: d.assigned_to_id,
+            assigned_to_name: d.assigned_to?.full_name,
+            notes: Array.isArray(d.notes) ? d.notes : typeof d.notes === 'string' ? JSON.parse(d.notes) : [],
+            solution: d.solution,
+            closed_at: d.closed_at,
+            created_at: d.created_at,
+            updated_at: d.updated_at,
+          }));
+          return { orders: mapped };
+        }
+      } catch (err) {
+        // Fallback silencioso para local
+      }
+    }
+
+    // 2. Tenta API Express local
     try {
       const searchParams = new URLSearchParams();
       if (params?.status) searchParams.set('status', params.status);
@@ -883,17 +933,22 @@ export const api = {
       if (params?.sector_id) searchParams.set('sector_id', params.sector_id);
       const queryStr = searchParams.toString() ? `?${searchParams.toString()}` : '';
 
-      return await request<{ orders: ServiceOrder[] }>(`/api/service-orders${queryStr}`);
+      const res = await request<{ orders: ServiceOrder[] }>(`/api/service-orders${queryStr}`);
+      if (res && Array.isArray(res.orders)) {
+        return res;
+      }
     } catch {
-      // Fallback para armazenamento local com dados iniciais
-      const local = getLocalServiceOrders();
-      let filtered = [...local];
-      if (params?.status) filtered = filtered.filter((o) => o.status === params.status);
-      if (params?.priority) filtered = filtered.filter((o) => o.priority === params.priority);
-      if (params?.category) filtered = filtered.filter((o) => o.category === params.category);
-      if (params?.sector_id) filtered = filtered.filter((o) => o.sector_id === params.sector_id);
-      return { orders: filtered };
+      // Fallback
     }
+
+    // 3. Fallback resiliente para localStorage
+    const local = getLocalServiceOrders();
+    let filtered = [...local];
+    if (params?.status) filtered = filtered.filter((o) => o.status === params.status);
+    if (params?.priority) filtered = filtered.filter((o) => o.priority === params.priority);
+    if (params?.category) filtered = filtered.filter((o) => o.category === params.category);
+    if (params?.sector_id) filtered = filtered.filter((o) => o.sector_id === params.sector_id);
+    return { orders: filtered };
   },
 
   createServiceOrder: async (data: {
@@ -904,34 +959,73 @@ export const api = {
     sector_id: string;
     line_or_location?: string;
   }) => {
+    // 1. Tenta Supabase
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const currentUserId = sessionData?.session?.user?.id;
+        const currentUserName = sessionData?.session?.user?.user_metadata?.full_name || sessionData?.session?.user?.email?.split('@')[0] || 'Usuário';
+
+        const countRes = await supabase.from('service_orders').select('id', { count: 'exact', head: true });
+        const currentYear = new Date().getFullYear();
+        const nextNum = ((countRes.count || 0) + 1).toString().padStart(4, '0');
+        const ticketNumber = `OS-${currentYear}-${nextNum}`;
+
+        const newRow = {
+          ticket_number: ticketNumber,
+          title: data.title,
+          description: data.description,
+          category: data.category,
+          priority: data.priority,
+          status: 'open',
+          sector_id: data.sector_id,
+          line_or_location: data.line_or_location || null,
+          requester_id: currentUserId,
+          notes: [],
+        };
+
+        const { data: inserted, error } = await supabase.from('service_orders').insert(newRow).select().single();
+        if (!error && inserted) {
+          return { order: inserted as ServiceOrder };
+        }
+      } catch (err) {
+        // Fallback
+      }
+    }
+
+    // 2. Tenta API Express local
     try {
-      return await request<{ order: ServiceOrder }>('/api/service-orders', {
+      const res = await request<{ order: ServiceOrder }>('/api/service-orders', {
         method: 'POST',
         body: JSON.stringify(data),
       });
+      if (res && res.order) return res;
     } catch {
-      const local = getLocalServiceOrders();
-      const currentYear = new Date().getFullYear();
-      const nextNum = (local.length + 1).toString().padStart(4, '0');
-      const newOrder: ServiceOrder = {
-        id: `so-${Date.now()}`,
-        ticket_number: `OS-${currentYear}-${nextNum}`,
-        title: data.title,
-        description: data.description,
-        category: data.category as any,
-        priority: data.priority as any,
-        status: 'open',
-        sector_id: data.sector_id,
-        line_or_location: data.line_or_location || null,
-        requester_id: 'usr-current',
-        requester_name: 'Usuário Conectado',
-        notes: [],
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      saveLocalServiceOrders([newOrder, ...local]);
-      return { order: newOrder };
+      // Fallback
     }
+
+    // 3. Fallback localStorage
+    const local = getLocalServiceOrders();
+    const currentYear = new Date().getFullYear();
+    const nextNum = (local.length + 1).toString().padStart(4, '0');
+    const newOrder: ServiceOrder = {
+      id: `so-${Date.now()}`,
+      ticket_number: `OS-${currentYear}-${nextNum}`,
+      title: data.title,
+      description: data.description,
+      category: data.category as any,
+      priority: data.priority as any,
+      status: 'open',
+      sector_id: data.sector_id,
+      line_or_location: data.line_or_location || null,
+      requester_id: 'usr-current',
+      requester_name: 'Usuário Conectado',
+      notes: [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    saveLocalServiceOrders([newOrder, ...local]);
+    return { order: newOrder };
   },
 
   updateServiceOrder: async (
@@ -943,101 +1037,156 @@ export const api = {
       priority?: string;
     }
   ) => {
+    // 1. Tenta Supabase
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const payload: any = { ...updates, updated_at: new Date().toISOString() };
+        if (updates.status === 'completed') {
+          payload.closed_at = new Date().toISOString();
+        }
+        const { data: updated, error } = await supabase
+          .from('service_orders')
+          .update(payload)
+          .eq('id', id)
+          .select()
+          .single();
+
+        if (!error && updated) {
+          return { order: updated as ServiceOrder };
+        }
+      } catch {}
+    }
+
+    // 2. Tenta Express local
     try {
-      return await request<{ order: ServiceOrder }>(`/api/service-orders/${id}`, {
+      const res = await request<{ order: ServiceOrder }>(`/api/service-orders/${id}`, {
         method: 'PATCH',
         body: JSON.stringify(updates),
       });
-    } catch {
-      const local = getLocalServiceOrders();
-      const idx = local.findIndex((o) => o.id === id);
-      if (idx >= 0) {
-        const item = local[idx];
-        const newStatus = (updates.status as any) || item.status;
-        const updated: ServiceOrder = {
-          ...item,
-          status: newStatus,
-          assigned_to_id: updates.assigned_to_id !== undefined ? updates.assigned_to_id : item.assigned_to_id,
-          solution: updates.solution !== undefined ? updates.solution : item.solution,
-          priority: (updates.priority as any) || item.priority,
-          closed_at: newStatus === 'completed' && !item.closed_at ? new Date().toISOString() : item.closed_at,
-          updated_at: new Date().toISOString(),
-        };
-        local[idx] = updated;
-        saveLocalServiceOrders(local);
-        return { order: updated };
-      }
-      throw new Error('Ordem de serviço não encontrada.');
+      if (res && res.order) return res;
+    } catch {}
+
+    // 3. Fallback localStorage
+    const local = getLocalServiceOrders();
+    const idx = local.findIndex((o) => o.id === id);
+    if (idx >= 0) {
+      const item = local[idx];
+      const newStatus = (updates.status as any) || item.status;
+      const updated: ServiceOrder = {
+        ...item,
+        status: newStatus,
+        assigned_to_id: updates.assigned_to_id !== undefined ? updates.assigned_to_id : item.assigned_to_id,
+        solution: updates.solution !== undefined ? updates.solution : item.solution,
+        priority: (updates.priority as any) || item.priority,
+        closed_at: newStatus === 'completed' && !item.closed_at ? new Date().toISOString() : item.closed_at,
+        updated_at: new Date().toISOString(),
+      };
+      local[idx] = updated;
+      saveLocalServiceOrders(local);
+      return { order: updated };
     }
+    throw new Error('Ordem de serviço não encontrada.');
   },
 
   addServiceOrderNote: async (id: string, content: string) => {
-    try {
-      return await request<{ note: ServiceOrderNote; notes: ServiceOrderNote[] }>(`/api/service-orders/${id}/notes`, {
-        method: 'POST',
-        body: JSON.stringify({ content }),
-      });
-    } catch {
-      const local = getLocalServiceOrders();
-      const idx = local.findIndex((o) => o.id === id);
-      if (idx >= 0) {
-        const item = local[idx];
+    // 1. Tenta Supabase
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data: current } = await supabase.from('service_orders').select('notes').eq('id', id).single();
+        const currentNotes = Array.isArray(current?.notes) ? current.notes : [];
+        const { data: sessionData } = await supabase.auth.getSession();
         const newNote: ServiceOrderNote = {
           id: `note-${Date.now()}`,
-          author_id: 'usr-ti-01',
-          author_name: 'Equipe de TI Forteflex',
+          author_id: sessionData?.session?.user?.id || 'usr-ti-01',
+          author_name: sessionData?.session?.user?.user_metadata?.full_name || 'Equipe de TI Forteflex',
           author_role: 'admin',
           content,
           created_at: new Date().toISOString(),
         };
-        item.notes = [...(item.notes || []), newNote];
-        item.updated_at = new Date().toISOString();
-        saveLocalServiceOrders(local);
-        return { note: newNote, notes: item.notes };
-      }
-      throw new Error('Ordem de serviço não encontrada.');
+        const updatedNotes = [...currentNotes, newNote];
+        const { error } = await supabase
+          .from('service_orders')
+          .update({ notes: updatedNotes, updated_at: new Date().toISOString() })
+          .eq('id', id);
+
+        if (!error) {
+          return { note: newNote, notes: updatedNotes };
+        }
+      } catch {}
     }
+
+    // 2. Tenta Express
+    try {
+      const res = await request<{ note: ServiceOrderNote; notes: ServiceOrderNote[] }>(`/api/service-orders/${id}/notes`, {
+        method: 'POST',
+        body: JSON.stringify({ content }),
+      });
+      if (res && res.notes) return res;
+    } catch {}
+
+    // 3. Fallback localStorage
+    const local = getLocalServiceOrders();
+    const idx = local.findIndex((o) => o.id === id);
+    if (idx >= 0) {
+      const item = local[idx];
+      const newNote: ServiceOrderNote = {
+        id: `note-${Date.now()}`,
+        author_id: 'usr-ti-01',
+        author_name: 'Equipe de TI Forteflex',
+        author_role: 'admin',
+        content,
+        created_at: new Date().toISOString(),
+      };
+      item.notes = [...(item.notes || []), newNote];
+      item.updated_at = new Date().toISOString();
+      saveLocalServiceOrders(local);
+      return { note: newNote, notes: item.notes };
+    }
+    throw new Error('Ordem de serviço não encontrada.');
   },
 
   getServiceOrdersSummary: async () => {
+    // Tenta Express
     try {
-      return await request<{ summary: ServiceOrderSummary }>('/api/service-orders-summary');
-    } catch {
-      const orders = getLocalServiceOrders();
-      const total = orders.length;
-      const open = orders.filter((o) => o.status === 'open').length;
-      const in_progress = orders.filter((o) => o.status === 'in_progress').length;
-      const critical = orders.filter((o) => o.priority === 'critical' && o.status !== 'completed' && o.status !== 'cancelled').length;
-      const currentMonthPrefix = new Date().toISOString().slice(0, 7);
-      const completed_this_month = orders.filter((o) => o.status === 'completed' && (o.closed_at || '').startsWith(currentMonthPrefix)).length;
+      const res = await request<{ summary: ServiceOrderSummary }>('/api/service-orders-summary');
+      if (res && res.summary) return res;
+    } catch {}
 
-      return {
-        summary: {
-          total,
-          open,
-          in_progress,
-          critical,
-          completed_this_month,
-          avg_resolution_hours: 2.4,
-          by_category: [
-            { category: 'hardware', label: 'Hardware & Equipamentos', count: orders.filter((o) => o.category === 'hardware').length },
-            { category: 'printers_labels', label: 'Impressoras & Etiquetas', count: orders.filter((o) => o.category === 'printers_labels').length },
-            { category: 'access_passwords', label: 'Acessos & Senhas', count: orders.filter((o) => o.category === 'access_passwords').length },
-          ],
-          by_sector: [
-            { sector_name: 'Extrusão', count: orders.filter((o) => o.sector_id === 'sec-ext').length },
-            { sector_name: 'Corte e Solda', count: orders.filter((o) => o.sector_id === 'sec-cs').length },
-            { sector_name: 'Impressão Flexo', count: orders.filter((o) => o.sector_id === 'sec-imp').length },
-          ],
-          by_priority: [
-            { priority: 'critical', label: 'Crítica / Linha Parada', count: critical },
-            { priority: 'high', label: 'Alta', count: orders.filter((o) => o.priority === 'high').length },
-            { priority: 'medium', label: 'Média', count: orders.filter((o) => o.priority === 'medium').length },
-            { priority: 'low', label: 'Baixa', count: orders.filter((o) => o.priority === 'low').length },
-          ],
-        },
-      };
-    }
+    // Fallback calculado local
+    const orders = getLocalServiceOrders();
+    const total = orders.length;
+    const open = orders.filter((o) => o.status === 'open').length;
+    const in_progress = orders.filter((o) => o.status === 'in_progress').length;
+    const critical = orders.filter((o) => o.priority === 'critical' && o.status !== 'completed' && o.status !== 'cancelled').length;
+    const currentMonthPrefix = new Date().toISOString().slice(0, 7);
+    const completed_this_month = orders.filter((o) => o.status === 'completed' && (o.closed_at || '').startsWith(currentMonthPrefix)).length;
+
+    return {
+      summary: {
+        total,
+        open,
+        in_progress,
+        critical,
+        completed_this_month,
+        avg_resolution_hours: 2.4,
+        by_category: [
+          { category: 'hardware', label: 'Hardware & Equipamentos', count: orders.filter((o) => o.category === 'hardware').length },
+          { category: 'printers_labels', label: 'Impressoras & Etiquetas', count: orders.filter((o) => o.category === 'printers_labels').length },
+          { category: 'access_passwords', label: 'Acessos & Senhas', count: orders.filter((o) => o.category === 'access_passwords').length },
+        ],
+        by_sector: [
+          { sector_name: 'Extrusão', count: orders.filter((o) => o.sector_id === 'sec-ext').length },
+          { sector_name: 'Corte e Solda', count: orders.filter((o) => o.sector_id === 'sec-cs').length },
+          { sector_name: 'Impressão Flexo', count: orders.filter((o) => o.sector_id === 'sec-imp').length },
+        ],
+        by_priority: [
+          { priority: 'critical', label: 'Crítica / Linha Parada', count: critical },
+          { priority: 'high', label: 'Alta', count: orders.filter((o) => o.priority === 'high').length },
+          { priority: 'medium', label: 'Média', count: orders.filter((o) => o.priority === 'medium').length },
+          { priority: 'low', label: 'Baixa', count: orders.filter((o) => o.priority === 'low').length },
+        ],
+      },
+    };
   },
 };
 
@@ -1046,7 +1195,15 @@ const LOCAL_SO_KEY = 'novo_forteflex_service_orders';
 function getLocalServiceOrders(): ServiceOrder[] {
   try {
     const raw = localStorage.getItem(LOCAL_SO_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.map((o: any) => ({
+          ...o,
+          notes: Array.isArray(o.notes) ? o.notes : typeof o.notes === 'string' ? JSON.parse(o.notes) : [],
+        }));
+      }
+    }
   } catch {}
 
   const defaults: ServiceOrder[] = [
