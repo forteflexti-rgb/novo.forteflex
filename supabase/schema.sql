@@ -281,19 +281,19 @@ create policy "Admin acessa lotes de importação"
 -- =============================================================================
 
 insert into public.sectors (id, code, name, description, active) values
-  ('sec-ext', 'EXT', 'Extrusão', 'Extrusão de filmes técnicos e tubulares', true),
-  ('sec-cs', 'CS', 'Corte e Solda', 'Conversão, corte e soldagem industrial', true),
-  ('sec-imp', 'IMP', 'Impressão Flexográfica', 'Impressão rotativa de alta definição', true),
-  ('sec-emb', 'EMB', 'Acabamento e Embalagem', 'Revisão final, paletização e expedição', true)
+  ('sec-ext', 'EXT', '10 - Extrusão', 'Extrusão de filmes técnicos e tubulares', true),
+  ('sec-imp', 'IMP', '20 - Impressão Flexográfica', 'Impressão rotativa de alta definição', true),
+  ('sec-reb', 'REB', '30 - Rebobinadeira', 'Rebobinamento, refile e corte longitudinal', true),
+  ('sec-cs', 'CS', '50 - Corte e Solda', 'Conversão, corte e soldagem industrial', true),
+  ('sec-emb', 'EMB', '60 - Acabamento e Embalagem', 'Revisão final, paletização e expedição', true)
 on conflict (code) do nothing;
 
 insert into public.production_lines (id, sector_id, code, name, capacity_per_hour, active) values
-  ('lin-ext-01', 'sec-ext', 'EXT-01', 'Extrusora Balão 01', 220, true),
-  ('lin-ext-02', 'sec-ext', 'EXT-02', 'Extrusora Coextrusada 02', 310, true),
-  ('lin-cs-01', 'sec-cs', 'CS-01', 'Corte e Solda Automática 01', 180, true),
-  ('lin-cs-02', 'sec-cs', 'CS-02', 'Corte Lateral Alta Velocidade 02', 210, true),
-  ('lin-imp-01', 'sec-imp', 'IMP-01', 'Impressora Flexo 8 Cores', 260, true),
-  ('lin-emb-01', 'sec-emb', 'EMB-01', 'Linha de Rebobinamento e Paletização', 350, true)
+  ('lin-101-ext', 'sec-ext', '101-EXT', '101 - EXT. CARNEVALLI 50MM', 72.16, true),
+  ('lin-201-imp', 'sec-imp', '201-IMP', '201 - IMPRESSORA 1', 170.75, true),
+  ('lin-301-reb', 'sec-reb', '301-REB', '301 - REBOBINADEIRA 1', 81.30, true),
+  ('lin-501-cs01', 'sec-cs', '501-CS01', '501 - CORTE E SOLDA HECE SOLDA LATERAL', 2.47, true),
+  ('lin-502-cs02', 'sec-cs', '502-CS02', '502 - CORTE E SOLDA POLIMAQ. SOLDA FUNDO', 55.73, true)
 on conflict (code) do nothing;
 
 insert into public.products (id, sku, name, category, unit_of_measure, target_cycle_minutes, active) values

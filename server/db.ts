@@ -171,30 +171,30 @@ export function initDatabase(): void {
 
 function seedInitialCatalogAndUsers(): void {
   const sectors = [
-    { id: 'sec-ext', code: 'EXT', name: 'Extrusão', description: 'Extrusão de filmes técnicos e tubulares' },
-    { id: 'sec-cs', code: 'CS', name: 'Corte e Solda', description: 'Conversão, corte e soldagem industrial' },
-    { id: 'sec-imp', code: 'IMP', name: 'Impressão Flexográfica', description: 'Impressão rotativa de alta definição' },
-    { id: 'sec-emb', code: 'EMB', name: 'Acabamento e Embalagem', description: 'Revisão final, paletização e expedição' },
+    { id: 'sec-ext', code: 'EXT', name: '10 - Extrusão', description: 'Extrusão de filmes técnicos e tubulares' },
+    { id: 'sec-imp', code: 'IMP', name: '20 - Impressão Flexográfica', description: 'Impressão rotativa de alta definição' },
+    { id: 'sec-reb', code: 'REB', name: '30 - Rebobinadeira', description: 'Rebobinamento, refile e corte longitudinal' },
+    { id: 'sec-cs', code: 'CS', name: '50 - Corte e Solda', description: 'Corte lateral, solda fundo e conversão' },
+    { id: 'sec-emb', code: 'EMB', name: '60 - Acabamento e Embalagem', description: 'Revisão final, enfardamento e expedição' },
   ];
 
   const insertSector = db.prepare(
-    'INSERT INTO sectors (id, code, name, description, active) VALUES (?, ?, ?, ?, 1)'
+    'INSERT OR IGNORE INTO sectors (id, code, name, description, active) VALUES (?, ?, ?, ?, 1)'
   );
   for (const s of sectors) {
     insertSector.run(s.id, s.code, s.name, s.description);
   }
 
   const lines = [
-    { id: 'lin-ext-01', sector_id: 'sec-ext', code: 'EXT-01', name: 'Extrusora Balão 01', capacity_per_hour: 220 },
-    { id: 'lin-ext-02', sector_id: 'sec-ext', code: 'EXT-02', name: 'Extrusora Coextrusada 02', capacity_per_hour: 310 },
-    { id: 'lin-cs-01', sector_id: 'sec-cs', code: 'CS-01', name: 'Corte e Solda Automática 01', capacity_per_hour: 180 },
-    { id: 'lin-cs-02', sector_id: 'sec-cs', code: 'CS-02', name: 'Corte Lateral Alta Velocidade 02', capacity_per_hour: 210 },
-    { id: 'lin-imp-01', sector_id: 'sec-imp', code: 'IMP-01', name: 'Impressora Flexo 8 Cores', capacity_per_hour: 260 },
-    { id: 'lin-emb-01', sector_id: 'sec-emb', code: 'EMB-01', name: 'Linha de Rebobinamento e Paletização', capacity_per_hour: 350 },
+    { id: 'lin-101-ext', sector_id: 'sec-ext', code: '101-EXT', name: '101 - EXT. CARNEVALLI 50MM', capacity_per_hour: 72.16 },
+    { id: 'lin-201-imp', sector_id: 'sec-imp', code: '201-IMP', name: '201 - IMPRESSORA 1', capacity_per_hour: 170.75 },
+    { id: 'lin-301-reb', sector_id: 'sec-reb', code: '301-REB', name: '301 - REBOBINADEIRA 1', capacity_per_hour: 81.30 },
+    { id: 'lin-501-cs01', sector_id: 'sec-cs', code: '501-CS01', name: '501 - CORTE E SOLDA HECE SOLDA LATERAL', capacity_per_hour: 2.47 },
+    { id: 'lin-502-cs02', sector_id: 'sec-cs', code: '502-CS02', name: '502 - CORTE E SOLDA POLIMAQ. SOLDA FUNDO', capacity_per_hour: 55.73 },
   ];
 
   const insertLine = db.prepare(
-    'INSERT INTO production_lines (id, sector_id, code, name, capacity_per_hour, active) VALUES (?, ?, ?, ?, ?, 1)'
+    'INSERT OR IGNORE INTO production_lines (id, sector_id, code, name, capacity_per_hour, active) VALUES (?, ?, ?, ?, ?, 1)'
   );
   for (const l of lines) {
     insertLine.run(l.id, l.sector_id, l.code, l.name, l.capacity_per_hour);
