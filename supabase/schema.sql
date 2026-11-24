@@ -316,3 +316,38 @@ insert into public.production_goals (id, sector_id, line_id, product_id, shift_i
   ('goal-03', 'sec-cs', 'lin-cs-01', 'prod-03', 'shf-01', 'daily', 1400, 2.0, true),
   ('goal-04', 'sec-imp', 'lin-imp-01', 'prod-05', 'shf-02', 'daily', 1900, 3.0, true)
 on conflict (id) do nothing;
+
+-- 10. ORDENS DE SERVIÇO / CENTRAL DE TI
+create table if not exists public.service_orders (
+  id text primary key default gen_random_uuid()::text,
+  ticket_number text not null unique,
+  title text not null,
+  description text not null,
+  category text not null,
+  priority text not null,
+  status text not null,
+  sector_id text not null references public.sectors(id) on delete restrict,
+  line_or_location text,
+  requester_id uuid not null references public.profiles(id) on delete restrict,
+  assigned_to_id uuid references public.profiles(id) on delete set null,
+  notes jsonb not null default '[]'::jsonb,
+  solution text,
+  closed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.service_orders enable row level security;
+
+create policy "Todos autenticados podem ver ou abrir OS" on public.service_orders
+  for select using (auth.role() = 'authenticated');
+
+create policy "Todos autenticados podem criar OS" on public.service_orders
+  for insert with check (auth.role() = 'authenticated');
+
+create policy "Técnicos e Administradores podem atualizar OS" on public.service_orders
+  for update using (auth.role() = 'authenticated');
+
+insert into public.sectors (id, code, name, description, active) values
+  ('sec-ti', 'TI', 'Tecnologia da Informação & Automação', 'Suporte Técnico, Infraestrutura, Redes e Sistemas', true)
+on conflict (code) do nothing;

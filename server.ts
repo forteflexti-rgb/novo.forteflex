@@ -1413,6 +1413,303 @@ async function startServer() {
   });
 
   // ---------------------------------------------------------------------------
+  // SERVICE ORDERS (ORDENS DE SERVIÇO / CENTRAL DE TI)
+  // ---------------------------------------------------------------------------
+  app.get('/api/service-orders', requireAuth, (req: AuthenticatedRequest, res) => {
+    const isAdminOrTI =
+      req.user?.role === 'admin' ||
+      (req.user?.role as any) === 'ti' ||
+      req.user?.username === 'ti' ||
+      req.user?.sector_id === 'sec-ti';
+    const { status, priority, category, sector_id } = req.query;
+
+    let query = `
+      SELECT so.*,
+             s.name as sector_name,
+             req.full_name as requester_name,
+             req.email as requester_email,
+             tech.full_name as assigned_to_name
+      FROM service_orders so
+      JOIN sectors s ON s.id = so.sector_id
+      JOIN profiles req ON req.id = so.requester_id
+      LEFT JOIN profiles tech ON tech.id = so.assigned_to_id
+      WHERE 1=1
+    `;
+    const params: any[] = [];
+
+    // Se não for Admin/TI, restringe aos próprios chamados
+    if (!isAdminOrTI) {
+      query += ` AND so.requester_id = ?`;
+      params.push(req.user!.id);
+    }
+
+    if (status && typeof status === 'string') {
+      query += ` AND so.status = ?`;
+      params.push(status);
+    }
+    if (priority && typeof priority === 'string') {
+      query += ` AND so.priority = ?`;
+      params.push(priority);
+    }
+    if (category && typeof category === 'string') {
+      query += ` AND so.category = ?`;
+      params.push(category);
+    }
+    if (sector_id && typeof sector_id === 'string') {
+      query += ` AND so.sector_id = ?`;
+      params.push(sector_id);
+    }
+
+    query += ` ORDER BY CASE so.status
+      WHEN 'open' THEN 1
+      WHEN 'in_progress' THEN 2
+      WHEN 'waiting' THEN 3
+      WHEN 'completed' THEN 4
+      WHEN 'cancelled' THEN 5
+      ELSE 6 END,
+      CASE so.priority
+      WHEN 'critical' THEN 1
+      WHEN 'high' THEN 2
+      WHEN 'medium' THEN 3
+      WHEN 'low' THEN 4
+      ELSE 5 END,
+      so.created_at DESC`;
+
+    const rows = db.prepare(query).all(...params) as any[];
+    const items = rows.map((r) => {
+      let notes = [];
+      try {
+        notes = typeof r.notes === 'string' ? JSON.parse(r.notes) : r.notes || [];
+      } catch {
+        notes = [];
+      }
+      return {
+        ...r,
+        notes,
+      };
+    });
+
+    res.json({ orders: items });
+  });
+
+  app.post('/api/service-orders', requireAuth, (req: AuthenticatedRequest, res) => {
+    const { title, description, category, priority, sector_id, line_or_location } = req.body || {};
+
+    if (!title || !description || !category || !priority || !sector_id) {
+      res.status(400).json({
+        error: 'Preencha todos os campos obrigatórios (título, descrição, categoria, prioridade e setor).',
+      });
+      return;
+    }
+
+    const currentYear = new Date().getFullYear();
+    const countRow = db.prepare('SELECT COUNT(*) as c FROM service_orders').get() as { c: number };
+    const nextNum = (countRow.c + 1).toString().padStart(4, '0');
+    const ticket_number = `OS-${currentYear}-${nextNum}`;
+    const id = `so-${crypto.randomUUID().slice(0, 10)}`;
+
+    db.prepare(`
+      INSERT INTO service_orders (
+        id, ticket_number, title, description, category, priority, status, sector_id, line_or_location, requester_id, assigned_to_id, notes, solution, closed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, NULL, '[]', NULL, NULL)
+    `).run(
+      id,
+      ticket_number,
+      String(title).trim(),
+      String(description).trim(),
+      category,
+      priority,
+      sector_id,
+      line_or_location ? String(line_or_location).trim() : null,
+      req.user!.id
+    );
+
+    const created = db.prepare(`
+      SELECT so.*, s.name as sector_name, req.full_name as requester_name
+      FROM service_orders so
+      JOIN sectors s ON s.id = so.sector_id
+      JOIN profiles req ON req.id = so.requester_id
+      WHERE so.id = ?
+    `).get(id) as any;
+
+    res.status(201).json({
+      order: {
+        ...created,
+        notes: [],
+      },
+    });
+  });
+
+  app.patch('/api/service-orders/:id', requireAuth, (req: AuthenticatedRequest, res) => {
+    const { id } = req.params;
+    const { status, assigned_to_id, solution, priority } = req.body || {};
+
+    const existing = db.prepare('SELECT * FROM service_orders WHERE id = ?').get(id) as any;
+    if (!existing) {
+      res.status(404).json({ error: 'Ordem de serviço não encontrada.' });
+      return;
+    }
+
+    const newStatus = status || existing.status;
+    const newAssigned = assigned_to_id !== undefined ? assigned_to_id : existing.assigned_to_id;
+    const newSolution = solution !== undefined ? solution : existing.solution;
+    const newPriority = priority || existing.priority;
+    const closed_at =
+      newStatus === 'completed' && !existing.closed_at ? new Date().toISOString() : existing.closed_at;
+
+    db.prepare(`
+      UPDATE service_orders
+      SET status = ?, assigned_to_id = ?, solution = ?, priority = ?, closed_at = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).run(newStatus, newAssigned, newSolution, newPriority, closed_at, id);
+
+    const updated = db.prepare(`
+      SELECT so.*, s.name as sector_name, req.full_name as requester_name, tech.full_name as assigned_to_name
+      FROM service_orders so
+      JOIN sectors s ON s.id = so.sector_id
+      JOIN profiles req ON req.id = so.requester_id
+      LEFT JOIN profiles tech ON tech.id = so.assigned_to_id
+      WHERE so.id = ?
+    `).get(id) as any;
+
+    let notes = [];
+    try {
+      notes = JSON.parse(updated.notes || '[]');
+    } catch {}
+
+    res.json({
+      order: { ...updated, notes },
+    });
+  });
+
+  app.post('/api/service-orders/:id/notes', requireAuth, (req: AuthenticatedRequest, res) => {
+    const { id } = req.params;
+    const { content } = req.body || {};
+
+    if (!content || !String(content).trim()) {
+      res.status(400).json({ error: 'Conteúdo do apontamento não pode ser vazio.' });
+      return;
+    }
+
+    const row = db.prepare('SELECT notes FROM service_orders WHERE id = ?').get(id) as any;
+    if (!row) {
+      res.status(404).json({ error: 'Ordem de serviço não encontrada.' });
+      return;
+    }
+
+    let notes: any[] = [];
+    try {
+      notes = JSON.parse(row.notes || '[]');
+    } catch {}
+
+    const newNote = {
+      id: `note-${crypto.randomUUID().slice(0, 8)}`,
+      author_id: req.user!.id,
+      author_name: req.user!.full_name,
+      author_role: req.user!.role,
+      content: String(content).trim(),
+      created_at: new Date().toISOString(),
+    };
+    notes.push(newNote);
+
+    db.prepare("UPDATE service_orders SET notes = ?, updated_at = datetime('now') WHERE id = ?").run(
+      JSON.stringify(notes),
+      id
+    );
+
+    res.status(201).json({ note: newNote, notes });
+  });
+
+  app.get('/api/service-orders-summary', requireAuth, (_req: AuthenticatedRequest, res) => {
+    const orders = db.prepare(`
+      SELECT so.*, s.name as sector_name
+      FROM service_orders so
+      JOIN sectors s ON s.id = so.sector_id
+    `).all() as any[];
+
+    const total = orders.length;
+    const open = orders.filter((o) => o.status === 'open').length;
+    const in_progress = orders.filter((o) => o.status === 'in_progress').length;
+    const critical = orders.filter(
+      (o) => o.priority === 'critical' && o.status !== 'completed' && o.status !== 'cancelled'
+    ).length;
+
+    const currentMonthPrefix = new Date().toISOString().slice(0, 7);
+    const completed_this_month = orders.filter(
+      (o) => o.status === 'completed' && (o.closed_at || '').startsWith(currentMonthPrefix)
+    ).length;
+
+    const closedWithTimes = orders.filter((o) => o.status === 'completed' && o.closed_at && o.created_at);
+    let avg_resolution_hours = 0;
+    if (closedWithTimes.length > 0) {
+      const totalHours = closedWithTimes.reduce((acc, o) => {
+        const diffMs = new Date(o.closed_at).getTime() - new Date(o.created_at).getTime();
+        return acc + Math.max(0, diffMs / (1000 * 60 * 60));
+      }, 0);
+      avg_resolution_hours = Math.round((totalHours / closedWithTimes.length) * 10) / 10;
+    }
+
+    const categoryLabels: Record<string, string> = {
+      hardware: 'Hardware & Equipamentos',
+      systems_erp: 'Sistemas & ERP',
+      network_internet: 'Redes & Conexão',
+      printers_labels: 'Impressoras & Etiquetas',
+      access_passwords: 'Acessos & Senhas',
+      telephony: 'Telefonia / Ramais',
+      other: 'Outros Chamados',
+    };
+
+    const categoryCounts: Record<string, number> = {};
+    for (const o of orders) {
+      categoryCounts[o.category] = (categoryCounts[o.category] || 0) + 1;
+    }
+    const by_category = Object.entries(categoryCounts).map(([cat, count]) => ({
+      category: cat,
+      label: categoryLabels[cat] || cat,
+      count,
+    }));
+
+    const sectorCounts: Record<string, number> = {};
+    for (const o of orders) {
+      sectorCounts[o.sector_name] = (sectorCounts[o.sector_name] || 0) + 1;
+    }
+    const by_sector = Object.entries(sectorCounts).map(([sec, count]) => ({
+      sector_name: sec,
+      count,
+    }));
+
+    const priorityLabels: Record<string, string> = {
+      critical: 'Crítica / Linha Parada',
+      high: 'Alta',
+      medium: 'Média',
+      low: 'Baixa',
+    };
+    const priorityCounts: Record<string, number> = {};
+    for (const o of orders) {
+      priorityCounts[o.priority] = (priorityCounts[o.priority] || 0) + 1;
+    }
+    const by_priority = Object.entries(priorityCounts).map(([pri, count]) => ({
+      priority: pri,
+      label: priorityLabels[pri] || pri,
+      count,
+    }));
+
+    res.json({
+      summary: {
+        total,
+        open,
+        in_progress,
+        critical,
+        completed_this_month,
+        avg_resolution_hours,
+        by_category,
+        by_sector,
+        by_priority,
+      },
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // VITE MIDDLEWARE (DEV) OR STATIC ASSETS (PROD)
   // ---------------------------------------------------------------------------
   if (process.env.NODE_ENV !== 'production') {

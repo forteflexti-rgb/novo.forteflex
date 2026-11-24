@@ -19,6 +19,7 @@ import { AdminCatalogView } from './components/admin/AdminCatalogView';
 import { AdminImportsView } from './components/admin/AdminImportsView';
 import { AdminSettingsView } from './components/admin/AdminSettingsView';
 import { TvProjectionView } from './components/admin/TvProjectionView';
+import { ServiceOrdersView } from './components/ServiceOrdersView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AlertCircle } from 'lucide-react';
 
@@ -61,7 +62,7 @@ function Workspace() {
   }
 
   // Enforce strict role guard in UI navigation
-  const isAdmin = user.role === 'admin';
+  const isAdmin = user.role === 'admin' || (user.role as any) === 'ti';
   const safeRoute: AppRoute =
     !isAdmin && route.startsWith('admin-') ? 'production-entry' : route;
 
@@ -90,6 +91,10 @@ function Workspace() {
         </div>
       ) : (
         <>
+          {safeRoute === 'service-orders' && (
+            <ServiceOrdersView catalog={catalog} />
+          )}
+
           {safeRoute === 'production-entry' && (
             <ProductionForm catalog={catalog} />
           )}

@@ -293,6 +293,21 @@ export function LoginScreen() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                   <button
                     type="button"
+                    onClick={() => fillDemoAccount('ti', 'TI@2026')}
+                    className="text-left p-2.5 rounded-lg border border-teal-300 bg-teal-50/70 hover:bg-teal-100/70 transition-colors cursor-pointer sm:col-span-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="font-semibold text-teal-950 flex items-center gap-1.5">
+                        <span>Equipe de TI &amp; Suporte</span>
+                        <span className="text-[10px] px-1.5 py-0.2 bg-teal-700 text-white rounded font-normal">Central de OS</span>
+                      </div>
+                      <span className="text-[10px] text-teal-700 font-medium">Acesso Rápido</span>
+                    </div>
+                    <div className="font-mono text-[11px] text-teal-800 mt-0.5">ti / TI@2026 (ou ti@forteflex.com.br)</div>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => fillDemoAccount('admin', 'Forte@2026')}
                     className="text-left p-2.5 rounded-lg border border-slate-200 hover:border-teal-300 hover:bg-teal-50/50 transition-colors cursor-pointer"
                   >

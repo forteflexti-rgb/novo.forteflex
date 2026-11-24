@@ -12,6 +12,7 @@ import {
   Menu,
   X,
   Tv,
+  LifeBuoy,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { BrandMark } from './BrandMark';
@@ -20,6 +21,7 @@ import { usePortalConfig, DEFAULT_PORTAL_CONFIG } from '../lib/portalConfig';
 export type AppRoute =
   | 'production-entry'
   | 'my-records'
+  | 'service-orders'
   | 'admin-dashboard'
   | 'admin-records'
   | 'admin-reports'
@@ -44,6 +46,7 @@ interface LayoutShellProps {
 const ROUTE_TITLES: Record<AppRoute, { section: string; title: string }> = {
   'production-entry': { section: 'Produção', title: 'Registro de Produção' },
   'my-records': { section: 'Produção', title: 'Meus Registros' },
+  'service-orders': { section: 'Tecnologia & Suporte', title: 'Ordens de Serviço (OS)' },
   'admin-dashboard': { section: 'Gestão Executiva', title: 'Dashboard Gerencial' },
   'admin-records': { section: 'Operações', title: 'Todos os Registros' },
   'admin-reports': { section: 'Análises', title: 'Relatórios e Exportação' },
@@ -62,11 +65,12 @@ export function LayoutShell({ activeRoute, onNavigate, children }: LayoutShellPr
 
   if (!user) return null;
 
-  const isAdmin = user.role === 'admin';
+  const isAdmin = user.role === 'admin' || (user.role as any) === 'ti';
 
   const navItems: NavItem[] = isAdmin
     ? [
         { id: 'admin-dashboard', label: 'Dashboard Gerencial', icon: BarChart3 },
+        { id: 'service-orders', label: 'Ordens de Serviço (OS)', icon: LifeBuoy },
         { id: 'admin-tv', label: 'Modo TV / Projeção', icon: Tv },
         { id: 'admin-records', label: 'Registros de Produção', icon: ClipboardList },
         { id: 'production-entry', label: 'Novo Lançamento', icon: ClipboardPlus },
@@ -78,6 +82,7 @@ export function LayoutShell({ activeRoute, onNavigate, children }: LayoutShellPr
       ]
     : [
         { id: 'production-entry', label: 'Registrar Produção', icon: ClipboardPlus },
+        { id: 'service-orders', label: 'Chamados TI / Abrir OS', icon: LifeBuoy },
         ...(user.permissions.can_view_own_records || user.permissions.can_view_sector_records
           ? [{ id: 'my-records' as AppRoute, label: 'Meus Registros', icon: ClipboardList }]
           : []),

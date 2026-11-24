@@ -12,6 +12,9 @@ import type {
   Sector,
   Shift,
   UserProfile,
+  ServiceOrder,
+  ServiceOrderSummary,
+  ServiceOrderNote,
 } from '../types';
 
 const TOKEN_KEY = 'novo_forteflex_token';
@@ -867,4 +870,271 @@ export const api = {
       body: JSON.stringify(payload),
     });
   },
+
+  // ---------------------------------------------------------------------------
+  // SERVICE ORDERS (ORDENS DE SERVIÇO / CENTRAL DE TI)
+  // ---------------------------------------------------------------------------
+  getServiceOrders: async (params?: { status?: string; priority?: string; category?: string; sector_id?: string }) => {
+    try {
+      const searchParams = new URLSearchParams();
+      if (params?.status) searchParams.set('status', params.status);
+      if (params?.priority) searchParams.set('priority', params.priority);
+      if (params?.category) searchParams.set('category', params.category);
+      if (params?.sector_id) searchParams.set('sector_id', params.sector_id);
+      const queryStr = searchParams.toString() ? `?${searchParams.toString()}` : '';
+
+      return await request<{ orders: ServiceOrder[] }>(`/api/service-orders${queryStr}`);
+    } catch {
+      // Fallback para armazenamento local com dados iniciais
+      const local = getLocalServiceOrders();
+      let filtered = [...local];
+      if (params?.status) filtered = filtered.filter((o) => o.status === params.status);
+      if (params?.priority) filtered = filtered.filter((o) => o.priority === params.priority);
+      if (params?.category) filtered = filtered.filter((o) => o.category === params.category);
+      if (params?.sector_id) filtered = filtered.filter((o) => o.sector_id === params.sector_id);
+      return { orders: filtered };
+    }
+  },
+
+  createServiceOrder: async (data: {
+    title: string;
+    description: string;
+    category: string;
+    priority: string;
+    sector_id: string;
+    line_or_location?: string;
+  }) => {
+    try {
+      return await request<{ order: ServiceOrder }>('/api/service-orders', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    } catch {
+      const local = getLocalServiceOrders();
+      const currentYear = new Date().getFullYear();
+      const nextNum = (local.length + 1).toString().padStart(4, '0');
+      const newOrder: ServiceOrder = {
+        id: `so-${Date.now()}`,
+        ticket_number: `OS-${currentYear}-${nextNum}`,
+        title: data.title,
+        description: data.description,
+        category: data.category as any,
+        priority: data.priority as any,
+        status: 'open',
+        sector_id: data.sector_id,
+        line_or_location: data.line_or_location || null,
+        requester_id: 'usr-current',
+        requester_name: 'Usuário Conectado',
+        notes: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      saveLocalServiceOrders([newOrder, ...local]);
+      return { order: newOrder };
+    }
+  },
+
+  updateServiceOrder: async (
+    id: string,
+    updates: {
+      status?: string;
+      assigned_to_id?: string | null;
+      solution?: string;
+      priority?: string;
+    }
+  ) => {
+    try {
+      return await request<{ order: ServiceOrder }>(`/api/service-orders/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      });
+    } catch {
+      const local = getLocalServiceOrders();
+      const idx = local.findIndex((o) => o.id === id);
+      if (idx >= 0) {
+        const item = local[idx];
+        const newStatus = (updates.status as any) || item.status;
+        const updated: ServiceOrder = {
+          ...item,
+          status: newStatus,
+          assigned_to_id: updates.assigned_to_id !== undefined ? updates.assigned_to_id : item.assigned_to_id,
+          solution: updates.solution !== undefined ? updates.solution : item.solution,
+          priority: (updates.priority as any) || item.priority,
+          closed_at: newStatus === 'completed' && !item.closed_at ? new Date().toISOString() : item.closed_at,
+          updated_at: new Date().toISOString(),
+        };
+        local[idx] = updated;
+        saveLocalServiceOrders(local);
+        return { order: updated };
+      }
+      throw new Error('Ordem de serviço não encontrada.');
+    }
+  },
+
+  addServiceOrderNote: async (id: string, content: string) => {
+    try {
+      return await request<{ note: ServiceOrderNote; notes: ServiceOrderNote[] }>(`/api/service-orders/${id}/notes`, {
+        method: 'POST',
+        body: JSON.stringify({ content }),
+      });
+    } catch {
+      const local = getLocalServiceOrders();
+      const idx = local.findIndex((o) => o.id === id);
+      if (idx >= 0) {
+        const item = local[idx];
+        const newNote: ServiceOrderNote = {
+          id: `note-${Date.now()}`,
+          author_id: 'usr-ti-01',
+          author_name: 'Equipe de TI Forteflex',
+          author_role: 'admin',
+          content,
+          created_at: new Date().toISOString(),
+        };
+        item.notes = [...(item.notes || []), newNote];
+        item.updated_at = new Date().toISOString();
+        saveLocalServiceOrders(local);
+        return { note: newNote, notes: item.notes };
+      }
+      throw new Error('Ordem de serviço não encontrada.');
+    }
+  },
+
+  getServiceOrdersSummary: async () => {
+    try {
+      return await request<{ summary: ServiceOrderSummary }>('/api/service-orders-summary');
+    } catch {
+      const orders = getLocalServiceOrders();
+      const total = orders.length;
+      const open = orders.filter((o) => o.status === 'open').length;
+      const in_progress = orders.filter((o) => o.status === 'in_progress').length;
+      const critical = orders.filter((o) => o.priority === 'critical' && o.status !== 'completed' && o.status !== 'cancelled').length;
+      const currentMonthPrefix = new Date().toISOString().slice(0, 7);
+      const completed_this_month = orders.filter((o) => o.status === 'completed' && (o.closed_at || '').startsWith(currentMonthPrefix)).length;
+
+      return {
+        summary: {
+          total,
+          open,
+          in_progress,
+          critical,
+          completed_this_month,
+          avg_resolution_hours: 2.4,
+          by_category: [
+            { category: 'hardware', label: 'Hardware & Equipamentos', count: orders.filter((o) => o.category === 'hardware').length },
+            { category: 'printers_labels', label: 'Impressoras & Etiquetas', count: orders.filter((o) => o.category === 'printers_labels').length },
+            { category: 'access_passwords', label: 'Acessos & Senhas', count: orders.filter((o) => o.category === 'access_passwords').length },
+          ],
+          by_sector: [
+            { sector_name: 'Extrusão', count: orders.filter((o) => o.sector_id === 'sec-ext').length },
+            { sector_name: 'Corte e Solda', count: orders.filter((o) => o.sector_id === 'sec-cs').length },
+            { sector_name: 'Impressão Flexo', count: orders.filter((o) => o.sector_id === 'sec-imp').length },
+          ],
+          by_priority: [
+            { priority: 'critical', label: 'Crítica / Linha Parada', count: critical },
+            { priority: 'high', label: 'Alta', count: orders.filter((o) => o.priority === 'high').length },
+            { priority: 'medium', label: 'Média', count: orders.filter((o) => o.priority === 'medium').length },
+            { priority: 'low', label: 'Baixa', count: orders.filter((o) => o.priority === 'low').length },
+          ],
+        },
+      };
+    }
+  },
 };
+
+const LOCAL_SO_KEY = 'novo_forteflex_service_orders';
+
+function getLocalServiceOrders(): ServiceOrder[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_SO_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+
+  const defaults: ServiceOrder[] = [
+    {
+      id: 'so-001',
+      ticket_number: 'OS-2026-0001',
+      title: 'Leitor de código de barras sem comunicação na Extrusão 01',
+      description: 'O terminal de apontamento da Extrusora Balão 01 parou de ler os códigos de bobina. Apresenta erro de porta USB/comunicação.',
+      category: 'hardware',
+      priority: 'critical',
+      status: 'in_progress',
+      sector_id: 'sec-ext',
+      sector_name: 'Extrusão',
+      line_or_location: 'Linha EXT-01 (Cabeçote Principal)',
+      requester_id: 'usr-op-01',
+      requester_name: 'Carlos Eduardo Silva',
+      assigned_to_id: 'usr-ti-01',
+      assigned_to_name: 'Equipe de TI Forteflex',
+      notes: [
+        {
+          id: 'note-01',
+          author_id: 'usr-ti-01',
+          author_name: 'Equipe de TI Forteflex',
+          author_role: 'admin',
+          content: 'Técnico se deslocando para a linha de Extrusão 01 para substituição do cabo de rede e teste do leitor óptico.',
+          created_at: new Date(Date.now() - 3600000).toISOString(),
+        },
+      ],
+      created_at: new Date(Date.now() - 7200000).toISOString(),
+      updated_at: new Date(Date.now() - 3600000).toISOString(),
+    },
+    {
+      id: 'so-002',
+      ticket_number: 'OS-2026-0002',
+      title: 'Falha no alinhamento de impressão térmica de etiquetas',
+      description: 'Impressora Zebra da linha de Corte e Solda 01 está pulando 2 etiquetas e cortando o código de barras no meio.',
+      category: 'printers_labels',
+      priority: 'medium',
+      status: 'open',
+      sector_id: 'sec-cs',
+      sector_name: 'Corte e Solda',
+      line_or_location: 'Linha CS-01 (Mesa de Inspeção)',
+      requester_id: 'usr-op-02',
+      requester_name: 'Mariana Ferreira Costa',
+      notes: [],
+      created_at: new Date(Date.now() - 18000000).toISOString(),
+      updated_at: new Date(Date.now() - 18000000).toISOString(),
+    },
+    {
+      id: 'so-003',
+      ticket_number: 'OS-2026-0003',
+      title: 'Liberação de perfil para novo operador de Impressão Flexo',
+      description: 'Solicitamos criação de login e senha para operador substituto no turno T2 da impressora 8 cores.',
+      category: 'access_passwords',
+      priority: 'low',
+      status: 'completed',
+      sector_id: 'sec-imp',
+      sector_name: 'Impressão Flexográfica',
+      line_or_location: 'Sala de Preparação de Tintas / Flexo',
+      requester_id: 'usr-admin-01',
+      requester_name: 'Ricardo Almeida (Gestão Industrial)',
+      assigned_to_id: 'usr-ti-01',
+      assigned_to_name: 'Equipe de TI Forteflex',
+      notes: [
+        {
+          id: 'note-02',
+          author_id: 'usr-ti-01',
+          author_name: 'Equipe de TI Forteflex',
+          author_role: 'admin',
+          content: 'Acesso liberado e validado diretamente com o operador no 2º turno.',
+          created_at: new Date(Date.now() - 86400000).toISOString(),
+        },
+      ],
+      solution: 'Usuário criado com perfil de Operador, vinculado ao setor de Impressão e com permissão padrão de apontamento.',
+      closed_at: new Date().toISOString(),
+      created_at: new Date(Date.now() - 86400000).toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+  ];
+
+  try {
+    localStorage.setItem(LOCAL_SO_KEY, JSON.stringify(defaults));
+  } catch {}
+  return defaults;
+}
+
+function saveLocalServiceOrders(orders: ServiceOrder[]): void {
+  try {
+    localStorage.setItem(LOCAL_SO_KEY, JSON.stringify(orders));
+  } catch {}
+}

@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'operator';
+export type UserRole = 'admin' | 'operator' | 'ti';
 
 export interface UserPermissions {
   can_create_records: boolean;
@@ -207,4 +207,73 @@ export interface ImportValidationRow {
     product_id: string;
     unit_of_measure: string;
   };
+}
+
+export type ServiceOrderPriority = 'low' | 'medium' | 'high' | 'critical';
+export type ServiceOrderStatus = 'open' | 'in_progress' | 'waiting' | 'completed' | 'cancelled';
+export type ServiceOrderCategory =
+  | 'hardware'
+  | 'systems_erp'
+  | 'network_internet'
+  | 'printers_labels'
+  | 'access_passwords'
+  | 'telephony'
+  | 'other';
+
+export interface ServiceOrderNote {
+  id: string;
+  author_id: string;
+  author_name: string;
+  author_role: UserRole;
+  content: string;
+  created_at: string;
+}
+
+export interface ServiceOrder {
+  id: string;
+  ticket_number: string;
+  title: string;
+  description: string;
+  category: ServiceOrderCategory;
+  priority: ServiceOrderPriority;
+  status: ServiceOrderStatus;
+  sector_id: string;
+  sector_name?: string;
+  line_or_location?: string | null;
+  requester_id: string;
+  requester_name: string;
+  requester_email?: string;
+  assigned_to_id?: string | null;
+  assigned_to_name?: string | null;
+  notes: ServiceOrderNote[];
+  solution?: string | null;
+  closed_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ServiceOrderSummary {
+  total: number;
+  open: number;
+  in_progress: number;
+  critical: number;
+  completed_this_month: number;
+  avg_resolution_hours: number;
+  by_category: { category: string; label: string; count: number }[];
+  by_sector: { sector_name: string; count: number }[];
+  by_priority: { priority: string; label: string; count: number }[];
+}
+
+export interface TISettings {
+  emergency_phone: string;
+  emergency_whatsapp: string;
+  support_email: string;
+  sla_hours: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+  notify_critical_on_screen: boolean;
+  allow_operator_direct_tickets: boolean;
 }

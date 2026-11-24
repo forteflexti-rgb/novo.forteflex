@@ -130,12 +130,37 @@ export function initDatabase(): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS service_orders (
+      id TEXT PRIMARY KEY,
+      ticket_number TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      category TEXT NOT NULL,
+      priority TEXT NOT NULL,
+      status TEXT NOT NULL,
+      sector_id TEXT NOT NULL REFERENCES sectors(id) ON DELETE RESTRICT,
+      line_or_location TEXT,
+      requester_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE RESTRICT,
+      assigned_to_id TEXT REFERENCES profiles(id) ON DELETE SET NULL,
+      notes TEXT NOT NULL DEFAULT '[]',
+      solution TEXT,
+      closed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE INDEX IF NOT EXISTS idx_prod_records_date ON production_records(production_date);
     CREATE INDEX IF NOT EXISTS idx_prod_records_operator ON production_records(operator_id);
     CREATE INDEX IF NOT EXISTS idx_prod_records_sector ON production_records(sector_id);
     CREATE INDEX IF NOT EXISTS idx_prod_records_line ON production_records(line_id);
     CREATE INDEX IF NOT EXISTS idx_prod_records_product ON production_records(product_id);
+    CREATE INDEX IF NOT EXISTS idx_so_status ON service_orders(status);
+    CREATE INDEX IF NOT EXISTS idx_so_requester ON service_orders(requester_id);
+    CREATE INDEX IF NOT EXISTS idx_so_sector ON service_orders(sector_id);
   `);
+
+  ensureTISectorAndUser();
+  seedDemoServiceOrders();
 
   const sectorCount = db.prepare('SELECT COUNT(*) as c FROM sectors').get() as { c: number };
   if (sectorCount.c === 0) {
@@ -337,3 +362,124 @@ export function clearDemoProductionData(): number {
   const result = db.prepare('DELETE FROM production_records WHERE is_demo = 1').run();
   return result.changes;
 }
+
+export function ensureTISectorAndUser(): void {
+  try {
+    // 1. Garante que o setor de TI existe
+    db.prepare(`
+      INSERT OR IGNORE INTO sectors (id, code, name, description, active)
+      VALUES ('sec-ti', 'TI', 'Tecnologia da Informação & Automação', 'Infraestrutura de TI, Sistemas, Redes e Automação Industrial', 1)
+    `).run();
+
+    // 2. Garante que o usuário TI existe
+    const tiUser = db.prepare('SELECT id FROM profiles WHERE username = ? OR email = ?').get('ti', 'ti@forteflex.com.br');
+    if (!tiUser) {
+      const tiHash = bcrypt.hashSync('TI@2026', 10);
+      const tiPermissions = JSON.stringify({
+        can_create_records: true,
+        can_edit_own_records: true,
+        can_view_own_records: true,
+        can_view_sector_records: true,
+        can_export_own_records: true,
+        is_ti_admin: true,
+      });
+      db.prepare(`
+        INSERT INTO profiles (id, username, email, password_hash, full_name, role, sector_id, is_active, permissions)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
+      `).run('usr-ti-01', 'ti', 'ti@forteflex.com.br', tiHash, 'Equipe de TI Forteflex', 'admin', 'sec-ti', tiPermissions);
+    }
+  } catch (err) {
+    console.warn('Erro ao garantir setor e usuário de TI:', err);
+  }
+}
+
+export function seedDemoServiceOrders(): void {
+  try {
+    const existing = db.prepare('SELECT COUNT(*) as c FROM service_orders').get() as { c: number };
+    if (existing && existing.c > 0) return;
+
+    const insertSO = db.prepare(`
+      INSERT INTO service_orders (id, ticket_number, title, description, category, priority, status, sector_id, line_or_location, requester_id, assigned_to_id, notes, solution, closed_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', ?), datetime('now'))
+    `);
+
+    const note1 = JSON.stringify([
+      {
+        id: 'note-01',
+        author_id: 'usr-ti-01',
+        author_name: 'Equipe de TI Forteflex',
+        author_role: 'admin',
+        content: 'Técnico se deslocando para a linha de Extrusão 01 para substituição do cabo de rede e teste do leitor óptico.',
+        created_at: new Date(Date.now() - 3600000).toISOString(),
+      }
+    ]);
+
+    insertSO.run(
+      'so-001',
+      'OS-2026-0001',
+      'Leitor de código de barras sem comunicação na Extrusão 01',
+      'O terminal de apontamento da Extrusora Balão 01 parou de ler os códigos de bobina. Apresenta erro de porta USB/comunicação.',
+      'hardware',
+      'critical',
+      'in_progress',
+      'sec-ext',
+      'Linha EXT-01 (Cabeçote Principal)',
+      'usr-op-01',
+      'usr-ti-01',
+      note1,
+      null,
+      null,
+      '-2 hours'
+    );
+
+    insertSO.run(
+      'so-002',
+      'OS-2026-0002',
+      'Falha no alinhamento de impressão térmica de etiquetas',
+      'Impressora Zebra da linha de Corte e Solda 01 está pulando 2 etiquetas e cortando o código de barras no meio.',
+      'printers_labels',
+      'medium',
+      'open',
+      'sec-cs',
+      'Linha CS-01 (Mesa de Inspeção)',
+      'usr-op-02',
+      null,
+      '[]',
+      null,
+      null,
+      '-5 hours'
+    );
+
+    const note3 = JSON.stringify([
+      {
+        id: 'note-02',
+        author_id: 'usr-ti-01',
+        author_name: 'Equipe de TI Forteflex',
+        author_role: 'admin',
+        content: 'Acesso liberado e validado diretamente com o operador no 2º turno.',
+        created_at: new Date(Date.now() - 86400000).toISOString(),
+      }
+    ]);
+
+    insertSO.run(
+      'so-003',
+      'OS-2026-0003',
+      'Liberação de perfil para novo operador de Impressão Flexo',
+      'Solicitamos criação de login e senha para operador substituto no turno T2 da impressora 8 cores.',
+      'access_passwords',
+      'low',
+      'completed',
+      'sec-imp',
+      'Sala de Preparação de Tintas / Flexo',
+      'usr-admin-01',
+      'usr-ti-01',
+      note3,
+      'Usuário criado com perfil de Operador, vinculado ao setor de Impressão e com permissão padrão de apontamento.',
+      new Date().toISOString(),
+      '-1 day'
+    );
+  } catch (err) {
+    console.warn('Erro ao inicializar demo service_orders:', err);
+  }
+}
+
