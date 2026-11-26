@@ -19,6 +19,7 @@ import type {
 } from '../types';
 
 import * as irogApi from './irog/supabaseApi';
+import * as catalogApi from './irog/catalogApi';
 
 const EMPTY_IROG_CATALOG = {
   machines: [],
@@ -314,6 +315,9 @@ export const api = {
   createAlertRule: irogApi.createAlertRule,
   updateAlertRule: irogApi.updateAlertRule,
   getAuditLogs: () => irogApi.getAuditLogs(),
+
+  // Cadastros industriais & parâmetros IROG (Supabase) — ver src/lib/irog/catalogApi.ts
+  ...catalogApi,
 
   getProductionRecords: async (filters?: Partial<DashboardFilters>) => {
     if (isSupabaseConfigured && supabase) {
@@ -810,7 +814,8 @@ export const api = {
     name: string;
     category: string;
     unit_of_measure: string;
-    target_cycle_minutes: number;
+    /** Campo legado (não usado pelo IROG). Omitido = valor padrão do banco. */
+    target_cycle_minutes?: number;
   }) => {
     if (isSupabaseConfigured && supabase) {
       const { data, error } = await supabase.from('products').insert(payload).select('id').single();
@@ -829,7 +834,7 @@ export const api = {
     return request<{ updated: boolean }>(`/api/admin/products/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
   },
 
-  createShift: async (payload: { code: string; name: string; start_time: string; end_time: string }) => {
+  createShift: async (payload: { code: string; name: string; start_time: string; end_time: string; break_minutes?: number }) => {
     if (isSupabaseConfigured && supabase) {
       const { data, error } = await supabase.from('shifts').insert(payload).select('id').single();
       if (error) throw new Error(error.message);

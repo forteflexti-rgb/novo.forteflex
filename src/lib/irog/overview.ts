@@ -105,6 +105,26 @@ export function buildIrogOverview(data: IrogSourceData, filters: Partial<Dashboa
   for (const l of losses) keys.add(`${l.resource_id}|${l.production_date}`);
   for (const d of downtime) keys.add(`${d.resource_id}|${d.production_date}`);
 
+  // Dias PROGRAMADOS sem nenhum apontamento também entram (máquina programada e parada = perda de
+  // disponibilidade). Período: o filtro, ou o intervalo dos dados quando não há filtro de datas.
+  const dataDates = [...keys].map((k) => k.split('|')[1]).sort();
+  const from = filters.startDate || dataDates[0];
+  const to = filters.endDate || dataDates.at(-1);
+  if (from && to) {
+    const todayBrt = new Date(Date.now() - BRT_OFFSET_MS).toISOString().slice(0, 10);
+    const last = to < todayBrt ? to : todayBrt; // não conta dias futuros
+    let day = 0;
+    for (let t = Date.parse(`${from}T12:00:00Z`); day < 400; t += DAY_MS, day++) {
+      const date = new Date(t).toISOString().slice(0, 10);
+      if (date > last) break;
+      for (const r of resources) {
+        if (data.calendars.some((c) => c.resource_id === r.id && c.weekday === weekday(date) && inRange(date, c.valid_from, c.valid_to))) {
+          keys.add(`${r.id}|${date}`);
+        }
+      }
+    }
+  }
+
   const grains: Grain[] = [];
   for (const key of keys) {
     const [resourceId, date] = key.split('|');
@@ -118,8 +138,9 @@ export function buildIrogOverview(data: IrogSourceData, filters: Partial<Dashboa
       for (const x of data.exceptions.filter((x) => x.exception_date === date && (x.resource_id === null || x.resource_id === resourceId))) {
         const mins = x.minutes ?? null;
         if (x.kind === 'holiday' || x.kind === 'planned_stop') {
-          // sem minutos informados = o dia inteiro fora do calendário
-          calendarMinutes = mins === null ? 0 : Math.max(0, calendarMinutes - mins);
+          // sem minutos informados = o período inteiro (o turno indicado ou, sem turno, o dia todo)
+          const periodMinutes = x.shift_id ? cal.filter((c) => c.shift_id === x.shift_id).reduce((s, c) => s + c.planned_minutes, 0) : calendarMinutes;
+          calendarMinutes = Math.max(0, calendarMinutes - (mins === null ? periodMinutes : mins));
         }
         if (x.kind === 'extra_shift') calendarMinutes += mins ?? 0;
       }
@@ -195,7 +216,15 @@ export function buildIrogOverview(data: IrogSourceData, filters: Partial<Dashboa
         const key = `${p.message} Necessário: ${p.required.replace(/ para produto .*$/, '').replace(/ na unidade .*$/, ' na unidade do apontamento')}.`;
         reasons.set(key, (reasons.get(key) ?? 0) + Math.max(1, p.affectedRecords));
       }
-    for (const g of gs) for (const w of g.result.warnings) if (w.code === 'PARADA_NAO_APONTADA' || w.code === 'PERFORMANCE_ACIMA_100') reasons.set(`Aviso: ${w.message.replace(/^\d+ min/, 'Tempo')}`, (reasons.get(`Aviso: ${w.message.replace(/^\d+ min/, 'Tempo')}`) ?? 0) + 1);
+    for (const g of gs)
+      for (const w of g.result.warnings) {
+        if (w.code !== 'PARADA_NAO_APONTADA' && w.code !== 'PERFORMANCE_ACIMA_100') continue;
+        const key =
+          w.code === 'PARADA_NAO_APONTADA'
+            ? 'Aviso: tempo programado sem apontamento nem parada registrada (conta como parada não apontada).'
+            : 'Aviso: performance acima de 100% — o padrão produtivo pode estar subestimado.';
+        reasons.set(key, (reasons.get(key) ?? 0) + 1);
+      }
     const ok = gs.filter((g) => g.result.status === 'ok');
     const sumT = (f: (g: Grain) => number | null) => gs.reduce((s, g) => s + (f(g) ?? 0), 0);
     return {

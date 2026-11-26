@@ -71,10 +71,10 @@ export async function loadIrogCatalog(names: { sectors: Map<string, string>; lin
     id: r.id, sector_id: r.sector_id, sector_name: names.sectors.get(r.sector_id), line_id: r.line_id,
     line_name: r.line_id ? names.lines.get(r.line_id) ?? null : null, code: r.code, name: r.name,
     resource_type: r.resource_type, theoretical_capacity_per_hour: null, capacity_unit: '',
-    status: (stopped.has(r.id) ? 'stopped' : 'operating') as MachineStatus, active: r.active, created_at: r.created_at,
+    status: (stopped.has(r.id) ? 'stopped' : r.status ?? 'operating') as MachineStatus, active: r.active, created_at: r.created_at,
   }));
   const stages: ProductionStage[] = steps.map((s: any) => ({
-    id: s.id, sector_id: null, sector_name: null, code: s.code, name: s.name, description: null, active: s.active, created_at: s.created_at,
+    id: s.id, sector_id: s.sector_id ?? null, sector_name: s.sector_id ? names.sectors.get(s.sector_id) ?? null : null, code: s.code, name: s.name, description: s.description ?? null, active: s.active, created_at: s.created_at,
   }));
   const cycleStandards: CycleTimeStandard[] = standards.map((s: any) => {
     const perHour = s.standard_type === 'rate_per_hour' ? Number(s.value) : 3600 / Number(s.value);
@@ -89,7 +89,7 @@ export async function loadIrogCatalog(names: { sectors: Map<string, string>; lin
   });
   const orderRows: ProductionOrder[] = orders.map((o: any) => ({
     id: o.id, order_number: o.order_number, product_id: o.product_id ?? '', product_name: o.product_id ? names.products.get(o.product_id)?.name : undefined,
-    sector_id: '', line_id: null, machine_id: null, planned_quantity: Number(o.planned_quantity ?? 0),
+    sector_id: o.sector_id ?? '', sector_name: o.sector_id ? names.sectors.get(o.sector_id) : undefined, line_id: o.line_id ?? null, line_name: o.line_id ? names.lines.get(o.line_id) ?? null : null, machine_id: o.resource_id ?? null, machine_name: o.resource_id ? (resName.get(o.resource_id) as any)?.name ?? null : null, planned_quantity: Number(o.planned_quantity ?? 0),
     status: (['open', 'in_progress', 'completed', 'cancelled'].includes(o.status) ? o.status : 'open'), due_date: o.planned_end, created_at: o.created_at,
   }));
   const calendarRows: ProductionCalendarEntry[] = calendars.map((c: any) => {
@@ -109,8 +109,8 @@ export async function loadIrogCatalog(names: { sectors: Map<string, string>; lin
   }));
   const irogGoals: IrogGoal[] = goals.map((g: any) => ({
     id: g.id, scope_level: g.resource_id ? 'machine' : g.line_id ? 'line' : g.sector_id ? 'sector' : 'factory',
-    sector_id: g.sector_id, line_id: g.line_id, machine_id: g.resource_id, target_irog_percent: Number(g.target_percent ?? 0),
-    target_availability_percent: 0, target_performance_percent: 0, target_quality_percent: 0, max_loss_percent: Number(g.max_loss_percent ?? 0),
+    sector_id: g.sector_id, sector_name: g.sector_id ? names.sectors.get(g.sector_id) ?? null : null, line_id: g.line_id, line_name: g.line_id ? names.lines.get(g.line_id) ?? null : null, machine_id: g.resource_id, machine_name: g.resource_id ? (resName.get(g.resource_id) as any)?.name ?? null : null, target_irog_percent: Number(g.target_percent ?? 0),
+    target_availability_percent: Number(g.target_availability_percent ?? 0), target_performance_percent: Number(g.target_performance_percent ?? 0), target_quality_percent: Number(g.target_quality_percent ?? 0), max_loss_percent: Number(g.max_loss_percent ?? 0),
     effective_from: g.valid_from ?? '', active: g.active, created_at: g.created_at,
   }));
   return { machines, stages, cycleStandards, orders: orderRows, calendars: calendarRows, downtimeReasons, lossReasons, irogGoals };

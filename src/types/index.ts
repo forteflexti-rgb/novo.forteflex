@@ -62,6 +62,8 @@ export interface Shift {
   name: string;
   start_time: string;
   end_time: string;
+  /** Intervalo do turno em minutos (opcional). */
+  break_minutes?: number | null;
   active: boolean;
   created_at: string;
 }
