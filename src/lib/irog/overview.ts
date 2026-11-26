@@ -118,7 +118,13 @@ export function buildIrogOverview(data: IrogSourceData, filters: Partial<Dashboa
       const date = new Date(t).toISOString().slice(0, 10);
       if (date > last) break;
       for (const r of resources) {
-        if (data.calendars.some((c) => c.resource_id === r.id && c.weekday === weekday(date) && inRange(date, c.valid_from, c.valid_to))) {
+        // Feriado/parada programada do dia inteiro (sem turno e sem minutos): o dia não é programado.
+        const dayOff = data.exceptions.some(
+          (x) =>
+            x.exception_date === date && (x.resource_id === null || x.resource_id === r.id) &&
+            (x.kind === 'holiday' || x.kind === 'planned_stop') && x.shift_id === null && (x.minutes === null || x.minutes === undefined),
+        );
+        if (!dayOff && data.calendars.some((c) => c.resource_id === r.id && c.weekday === weekday(date) && inRange(date, c.valid_from, c.valid_to))) {
           keys.add(`${r.id}|${date}`);
         }
       }
