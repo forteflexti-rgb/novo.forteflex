@@ -9,13 +9,76 @@ interface AdminUsersViewProps {
   onCatalogUpdated: () => void;
 }
 
+const ROLE_LABELS: Record<UserRole, string> = {
+  admin: 'Administrador',
+  director: 'Diretoria / Executivo',
+  manager: 'Gestor de Setor',
+  leader: 'Líder de Produção',
+  operator: 'Operador de Produção',
+};
+
 const DEFAULT_PERMISSIONS: UserPermissions = {
   can_create_records: true,
   can_edit_own_records: true,
   can_view_own_records: true,
   can_view_sector_records: false,
   can_export_own_records: false,
+  can_register_downtime: true,
+  can_register_losses: true,
+  can_view_irog_dashboards: false,
 };
+
+function getDefaultPermsForRole(role: UserRole): UserPermissions {
+  if (role === 'admin') {
+    return {
+      can_create_records: true,
+      can_edit_own_records: true,
+      can_view_own_records: true,
+      can_view_sector_records: true,
+      can_export_own_records: true,
+      can_register_downtime: true,
+      can_register_losses: true,
+      can_view_irog_dashboards: true,
+    };
+  }
+  if (role === 'director') {
+    return {
+      can_create_records: false,
+      can_edit_own_records: false,
+      can_view_own_records: true,
+      can_view_sector_records: true,
+      can_export_own_records: true,
+      can_register_downtime: false,
+      can_register_losses: false,
+      can_view_irog_dashboards: true,
+    };
+  }
+  if (role === 'manager') {
+    return {
+      can_create_records: false,
+      can_edit_own_records: false,
+      can_view_own_records: true,
+      can_view_sector_records: true,
+      can_export_own_records: true,
+      can_register_downtime: true,
+      can_register_losses: true,
+      can_view_irog_dashboards: true,
+    };
+  }
+  if (role === 'leader') {
+    return {
+      can_create_records: true,
+      can_edit_own_records: true,
+      can_view_own_records: true,
+      can_view_sector_records: true,
+      can_export_own_records: true,
+      can_register_downtime: true,
+      can_register_losses: true,
+      can_view_irog_dashboards: true,
+    };
+  }
+  return { ...DEFAULT_PERMISSIONS };
+}
 
 export function AdminUsersView({ catalog, onCatalogUpdated }: AdminUsersViewProps) {
   const { user: currentUser } = useAuth();
@@ -33,6 +96,7 @@ export function AdminUsersView({ catalog, onCatalogUpdated }: AdminUsersViewProp
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('operator');
   const [sectorId, setSectorId] = useState('');
+  const [allowedSectorIds, setAllowedSectorIds] = useState<string[]>([]);
   const [permissions, setPermissions] = useState<UserPermissions>(DEFAULT_PERMISSIONS);
   const [saving, setSaving] = useState(false);
 
@@ -59,8 +123,10 @@ export function AdminUsersView({ catalog, onCatalogUpdated }: AdminUsersViewProp
     setEmail('');
     setPassword('');
     setRole('operator');
-    setSectorId(catalog.sectors[0]?.id || '');
-    setPermissions(DEFAULT_PERMISSIONS);
+    const firstSec = catalog.sectors[0]?.id || '';
+    setSectorId(firstSec);
+    setAllowedSectorIds(firstSec ? [firstSec] : []);
+    setPermissions(getDefaultPermsForRole('operator'));
     setError(null);
     setModalOpen(true);
   };
@@ -73,9 +139,19 @@ export function AdminUsersView({ catalog, onCatalogUpdated }: AdminUsersViewProp
     setPassword('');
     setRole(u.role);
     setSectorId(u.sector_id || '');
-    setPermissions({ ...DEFAULT_PERMISSIONS, ...u.permissions });
+    setAllowedSectorIds(u.allowed_sector_ids || (u.sector_id ? [u.sector_id] : []));
+    setPermissions({ ...getDefaultPermsForRole(u.role), ...u.permissions });
     setError(null);
     setModalOpen(true);
+  };
+
+  const handleRoleChange = (nextRole: UserRole) => {
+    setRole(nextRole);
+    setPermissions(getDefaultPermsForRole(nextRole));
+  };
+
+  const toggleAllowedSector = (id: string) => {
+    setAllowedSectorIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -84,6 +160,17 @@ export function AdminUsersView({ catalog, onCatalogUpdated }: AdminUsersViewProp
     setFeedback(null);
     setSaving(true);
     try {
+      const scopedSectors =
+        role === 'manager' || role === 'leader'
+          ? allowedSectorIds.length > 0
+            ? allowedSectorIds
+            : sectorId
+            ? [sectorId]
+            : []
+          : sectorId
+          ? [sectorId]
+          : [];
+
       if (editingUser) {
         await api.updateUser(editingUser.id, {
           full_name: fullName,
@@ -91,6 +178,7 @@ export function AdminUsersView({ catalog, onCatalogUpdated }: AdminUsersViewProp
           email,
           role,
           sector_id: sectorId || null,
+          allowed_sector_ids: scopedSectors,
           permissions,
           ...(password.trim().length >= 6 ? { password } : {}),
         });
@@ -103,6 +191,7 @@ export function AdminUsersView({ catalog, onCatalogUpdated }: AdminUsersViewProp
           password,
           role,
           sector_id: sectorId || null,
+          allowed_sector_ids: scopedSectors,
           permissions,
         });
         setFeedback(`Usuário ${fullName} cadastrado com sucesso.`);
@@ -135,10 +224,10 @@ export function AdminUsersView({ catalog, onCatalogUpdated }: AdminUsersViewProp
       <div className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-base font-display font-bold text-[#0f2544]">
-            Gestão de Usuários e Permissões
+            Gestão de Usuários, Perfis e Escopo por Setor
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Cadastre funcionários da produção e administradores, defina acessos e controle bloqueios.
+            Controle os 5 níveis de acesso (Administrador, Diretoria, Gestor, Líder e Operador) e permissões granulares.
           </p>
         </div>
 
@@ -180,7 +269,7 @@ export function AdminUsersView({ catalog, onCatalogUpdated }: AdminUsersViewProp
                 <tr>
                   <th className="px-4 py-3">Nome / Login</th>
                   <th className="px-4 py-3">Perfil</th>
-                  <th className="px-4 py-3">Setor</th>
+                  <th className="px-4 py-3">Setor / Escopo</th>
                   <th className="px-4 py-3">Permissões</th>
                   <th className="px-4 py-3">Situação</th>
                   <th className="px-4 py-3 text-right">Ações</th>
@@ -189,6 +278,9 @@ export function AdminUsersView({ catalog, onCatalogUpdated }: AdminUsersViewProp
               <tbody className="divide-y divide-slate-100">
                 {users.map((u) => {
                   const isSelf = u.id === currentUser?.id;
+                  const scopedNames = (u.allowed_sector_ids || [])
+                    .map((sid) => catalog.sectors.find((s) => s.id === sid)?.code || sid)
+                    .join(', ');
                   return (
                     <tr key={u.id} className="hover:bg-slate-50/80">
                       <td className="px-4 py-3">
@@ -197,17 +289,23 @@ export function AdminUsersView({ catalog, onCatalogUpdated }: AdminUsersViewProp
                           {u.username} · {u.email}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-slate-800 font-medium">
-                        {u.role === 'admin' ? 'Administrador' : 'Operador de Produção'}
+                      <td className="px-4 py-3 text-slate-800 font-medium">{ROLE_LABELS[u.role] || u.role}</td>
+                      <td className="px-4 py-3 text-xs text-slate-600">
+                        <div>{u.sector_name || 'Todos / Geral'}</div>
+                        {(u.role === 'manager' || u.role === 'leader') && scopedNames && (
+                          <div className="font-mono text-slate-500">Escopo: {scopedNames}</div>
+                        )}
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{u.sector_name || 'Geral'}</td>
                       <td className="px-4 py-3 text-xs text-slate-600">
                         {u.role === 'admin'
                           ? 'Acesso total administrativo'
+                          : u.role === 'director'
+                          ? 'Leitura executiva IROG + Relatórios + Auditoria'
                           : [
-                              u.permissions.can_create_records && 'Lançar',
-                              u.permissions.can_edit_own_records && 'Editar próprios',
-                              u.permissions.can_view_own_records && 'Consultar próprios',
+                              u.permissions.can_view_irog_dashboards && 'Dashboards IROG',
+                              u.permissions.can_create_records && 'Produção',
+                              u.permissions.can_register_downtime && 'Paradas',
+                              u.permissions.can_register_losses && 'Perdas',
                               u.permissions.can_view_sector_records && 'Ver setor',
                             ]
                               .filter(Boolean)
@@ -258,7 +356,7 @@ export function AdminUsersView({ catalog, onCatalogUpdated }: AdminUsersViewProp
       {/* Create / Edit Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white border border-slate-200 rounded-xl w-full max-w-xl p-6 space-y-5 my-8">
+          <div className="bg-white border border-slate-200 rounded-xl w-full max-w-2xl p-6 space-y-5 my-8">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-base font-display font-bold text-[#0f2544]">
                 {editingUser ? `Editar usuário: ${editingUser.full_name}` : 'Novo usuário'}
@@ -312,11 +410,14 @@ export function AdminUsersView({ catalog, onCatalogUpdated }: AdminUsersViewProp
                   <label className="block text-xs font-medium text-slate-700 mb-1">Perfil de acesso *</label>
                   <select
                     value={role}
-                    onChange={(e) => setRole(e.target.value as UserRole)}
+                    onChange={(e) => handleRoleChange(e.target.value as UserRole)}
                     className="w-full min-h-[42px] px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white"
                   >
                     <option value="operator">Operador de Produção</option>
-                    <option value="admin">Administrador da Empresa</option>
+                    <option value="leader">Líder de Produção</option>
+                    <option value="manager">Gestor de Setor</option>
+                    <option value="director">Diretoria / Executivo</option>
+                    <option value="admin">Administrador</option>
                   </select>
                 </div>
                 <div>
@@ -350,9 +451,29 @@ export function AdminUsersView({ catalog, onCatalogUpdated }: AdminUsersViewProp
                 </div>
               </div>
 
-              {role === 'operator' && (
+              {(role === 'manager' || role === 'leader') && (
+                <div className="pt-3 border-t border-slate-100 space-y-2">
+                  <div className="text-xs font-semibold text-[#0f2544]">Setores autorizados no escopo (RBAC)</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs text-slate-700">
+                    {catalog.sectors.map((s) => (
+                      <label key={s.id} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={allowedSectorIds.includes(s.id)}
+                          onChange={() => toggleAllowedSector(s.id)}
+                        />
+                        <span>
+                          {s.code} — {s.name}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {role !== 'admin' && (
                 <div className="pt-3 border-t border-slate-100 space-y-2.5">
-                  <div className="text-xs font-semibold text-[#0f2544]">Permissões do operador</div>
+                  <div className="text-xs font-semibold text-[#0f2544]">Permissões granulares</div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-700">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -363,6 +484,26 @@ export function AdminUsersView({ catalog, onCatalogUpdated }: AdminUsersViewProp
                         }
                       />
                       <span>Registrar nova produção</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(permissions.can_register_downtime)}
+                        onChange={(e) =>
+                          setPermissions((p) => ({ ...p, can_register_downtime: e.target.checked }))
+                        }
+                      />
+                      <span>Registrar / encerrar paradas</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(permissions.can_register_losses)}
+                        onChange={(e) =>
+                          setPermissions((p) => ({ ...p, can_register_losses: e.target.checked }))
+                        }
+                      />
+                      <span>Registrar perdas e refugos</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
@@ -393,6 +534,16 @@ export function AdminUsersView({ catalog, onCatalogUpdated }: AdminUsersViewProp
                         }
                       />
                       <span>Consultar registros do setor</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(permissions.can_view_irog_dashboards)}
+                        onChange={(e) =>
+                          setPermissions((p) => ({ ...p, can_view_irog_dashboards: e.target.checked }))
+                        }
+                      />
+                      <span>Visualizar dashboards IROG</span>
                     </label>
                   </div>
                 </div>

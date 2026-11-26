@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Database, Trash2, RotateCcw, CheckCircle2, AlertCircle, Server } from 'lucide-react';
 import { api } from '../../lib/api';
-import { AdminPortalSettings } from './AdminPortalSettings';
 
 export function AdminSettingsView() {
   const [health, setHealth] = useState<{
@@ -74,9 +73,6 @@ export function AdminSettingsView() {
           <span>{error}</span>
         </div>
       )}
-
-      {/* Identidade Visual, Logotipo e Textos do Portal (Restrito a Administradores) */}
-      <AdminPortalSettings />
 
       {/* Demo Data Governance */}
       <section className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">

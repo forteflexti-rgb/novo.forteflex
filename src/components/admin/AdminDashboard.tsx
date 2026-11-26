@@ -242,46 +242,13 @@ export function AdminDashboard({ catalog, onOpenTvMode }: AdminDashboardProps) {
               className="w-full min-h-[38px] px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white"
             >
               <option value="">Todos</option>
-              {(catalog.operators || []).map((o) => (
+              {catalog.operators.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.full_name}
                 </option>
               ))}
             </select>
           </div>
-        </div>
-
-        {/* Quick Period Selection */}
-        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
-          <span className="text-xs text-slate-500 font-medium mr-1">Períodos rápidos:</span>
-          {(summary?.availableMonths || []).slice(0, 6).map(({ month, total }) => {
-            const [y, m] = month.split('-').map(Number);
-            const startDate = `${month}-01`;
-            const endDate = `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
-            const active = filters.startDate === startDate && filters.endDate === endDate;
-            const label = new Date(y, m - 1, 1).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
-            return (
-              <button
-                key={month}
-                type="button"
-                onClick={() => setFilters((prev) => ({ ...prev, startDate, endDate }))}
-                className={`px-3 py-1 text-xs rounded-lg font-medium transition-colors cursor-pointer border ${
-                  active
-                    ? 'bg-teal-700 text-white border-teal-700 shadow-sm'
-                    : 'bg-teal-50 text-teal-800 border-teal-200 hover:bg-teal-100'
-                }`}
-              >
-                {label} · {formatNumber(total)} kg
-              </button>
-            );
-          })}
-          <button
-            type="button"
-            onClick={() => setFilters(DEFAULT_FILTERS)}
-            className="px-3 py-1 text-xs rounded-lg font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 transition-colors cursor-pointer"
-          >
-            Ver Todo o Histórico
-          </button>
         </div>
       </section>
 

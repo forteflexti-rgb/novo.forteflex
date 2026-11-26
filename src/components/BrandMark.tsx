@@ -1,41 +1,43 @@
 import React from 'react';
-import { usePortalConfig, DEFAULT_PORTAL_CONFIG } from '../lib/portalConfig';
 
 interface BrandMarkProps {
   variant?: 'light' | 'dark';
   size?: 'sm' | 'md' | 'lg';
-  showText?: boolean;
+  accent?: 'blue' | 'teal';
 }
 
-export function BrandMark({ variant = 'dark', size = 'md' }: BrandMarkProps) {
-  const config = usePortalConfig();
-  const safeConfig = config || DEFAULT_PORTAL_CONFIG;
-  const logoSrc = safeConfig.logoUrl || '/forteflex-logo.png';
+export function BrandMark({ variant = 'dark', size = 'md', accent = 'blue' }: BrandMarkProps) {
+  const textColor = variant === 'light' ? 'text-white' : 'text-[#0f2544]';
+  const dotColor =
+    variant === 'light'
+      ? accent === 'teal'
+        ? 'text-teal-200'
+        : 'text-blue-400'
+      : 'text-blue-600';
+  const iconBox =
+    variant === 'light'
+      ? accent === 'teal'
+        ? 'bg-white/15 border-white/25 text-white'
+        : 'bg-blue-500/20 border-blue-400/30 text-blue-300'
+      : 'bg-[#0f2544] border-[#0f2544] text-white';
 
-  const imgHeight =
-    size === 'lg' ? 'h-7 sm:h-8' : size === 'sm' ? 'h-5 sm:h-5.5' : 'h-6 sm:h-6.5';
-
-  if (variant === 'light') {
-    return (
-      <div className="inline-flex items-center gap-2 select-none">
-        <div className="bg-white/95 rounded-lg px-2.5 py-1.5 shadow-sm inline-flex items-center justify-center border border-white/20">
-          <img
-            src={logoSrc}
-            alt={safeConfig.companyName || 'Forteflex'}
-            className={`${imgHeight} max-w-[195px] object-contain`}
-          />
-        </div>
-      </div>
-    );
-  }
+  const textSize =
+    size === 'lg' ? 'text-2xl' : size === 'sm' ? 'text-base' : 'text-xl';
+  const boxSize =
+    size === 'lg' ? 'w-9 h-9' : size === 'sm' ? 'w-7 h-7' : 'w-8 h-8';
 
   return (
-    <div className="inline-flex items-center gap-2 select-none">
-      <img
-        src={logoSrc}
-        alt={safeConfig.companyName || 'Forteflex'}
-        className={`${imgHeight} max-w-[210px] object-contain`}
-      />
+    <div className="inline-flex items-center gap-2.5 whitespace-nowrap shrink-0 select-none">
+      <div className={`${boxSize} rounded-lg border flex items-center justify-center shrink-0 ${iconBox}`}>
+        <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.2">
+          <path d="M4 17V7l8-3 8 3v10l-8 3-8-3Z" />
+          <path d="M4 12h16" />
+          <path d="M12 4v16" />
+        </svg>
+      </div>
+      <span className={`font-display font-bold tracking-tight ${textSize} ${textColor}`}>
+        novo<span className={dotColor}>.</span>forteflex
+      </span>
     </div>
   );
 }

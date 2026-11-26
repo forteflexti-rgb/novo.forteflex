@@ -137,7 +137,7 @@ export function AdminRecordsView({ catalog }: AdminRecordsViewProps) {
             className="min-h-[38px] px-2.5 py-1.5 text-xs border border-slate-300 rounded-lg bg-white"
           >
             <option value="">Todos os funcionários</option>
-            {(catalog.operators || []).map((o) => (
+            {catalog.operators.map((o) => (
               <option key={o.id} value={o.id}>
                 {o.full_name}
               </option>
@@ -206,11 +206,6 @@ export function AdminRecordsView({ catalog }: AdminRecordsViewProps) {
                     <td className="px-4 py-3">
                       <div className="text-slate-900">{r.product_name}</div>
                       <div className="text-xs font-mono text-slate-500">{r.product_sku}</div>
-                      {r.notes && (
-                        <div className="text-[11px] text-teal-700 font-medium mt-0.5 line-clamp-1">
-                          {r.notes}
-                        </div>
-                      )}
                     </td>
                     <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-600">
                       {r.planned_quantity} {r.unit_of_measure}

@@ -3,14 +3,11 @@ import { Eye, EyeOff, Lock, User, ArrowRight, AlertCircle, CheckCircle2, Factory
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 import { BrandMark } from './BrandMark';
-import { usePortalConfig, DEFAULT_PORTAL_CONFIG } from '../lib/portalConfig';
 
 const FACILITY_IMAGE = '/src/assets/images/forteflex_industrial_facility_1795090606698.jpg';
 
 export function LoginScreen() {
   const { login } = useAuth();
-  const config = usePortalConfig();
-  const portalConfig = config || DEFAULT_PORTAL_CONFIG;
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -72,56 +69,54 @@ export function LoginScreen() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row">
-      {/* Left Institutional Visual Column */}
-      <div
-        className="relative lg:w-[46%] min-h-[240px] lg:min-h-screen overflow-hidden flex flex-col justify-between p-8 lg:p-12"
-        style={{ backgroundColor: portalConfig.accentColor }}
-      >
+      {/* Left Institutional Visual Column — Verde Água */}
+      <div className="relative lg:w-[46%] min-h-[240px] lg:min-h-screen bg-[#0d9488] overflow-hidden flex flex-col justify-between p-8 lg:p-12">
         {!imgFailed ? (
           <img
             src={FACILITY_IMAGE}
             alt="Linha de produção industrial novo.forteflex"
             referrerPolicy="no-referrer"
             onError={() => setImgFailed(true)}
-            className="absolute inset-0 w-full h-full object-cover opacity-55"
+            className="absolute inset-0 w-full h-full object-cover opacity-35 mix-blend-luminosity"
           />
         ) : (
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-40">
-            <Factory className="w-32 h-32 text-teal-300/30" />
+          <div className="absolute inset-0 bg-gradient-to-br from-[#065f5b] via-[#0d9488] to-[#2dd4bf] flex items-center justify-center opacity-50">
+            <Factory className="w-32 h-32 text-teal-100/35" />
           </div>
         )}
-        <div
-          className="absolute inset-0"
-          style={{
-            background: `linear-gradient(to top, ${portalConfig.accentColor}f5, ${portalConfig.accentColor}cc, ${portalConfig.accentColor}99)`,
-          }}
-        />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#065f5b]/92 via-[#0d9488]/75 to-[#14b8a6]/55" />
 
         <div className="relative z-10">
-          <BrandMark variant="light" size="lg" />
+          <BrandMark variant="light" size="lg" accent="teal" />
         </div>
 
         <div className="relative z-10 max-w-lg mt-12 lg:mt-0">
-          <p className="text-xs font-medium tracking-wide text-teal-300 mb-3">
-            {portalConfig.tagline}
+          <p className="text-xs font-medium tracking-wide text-teal-100 mb-3">
+            Plataforma de Gestão Industrial
           </p>
           <h1
             className="text-2xl sm:text-3xl lg:text-4xl font-display font-bold text-white leading-tight mb-4"
             style={{ textWrap: 'balance' }}
           >
-            {portalConfig.heading}
+            Do apontamento em linha aos indicadores gerenciais em tempo real.
           </h1>
-          <p className="text-sm sm:text-base text-slate-200/90 leading-relaxed mb-8">
-            {portalConfig.description}
+          <p className="text-sm sm:text-base text-teal-50/95 leading-relaxed mb-8">
+            Registre produção por turno, controle refugos e motivos de parada e acompanhe metas com rastreabilidade completa por operador e setor.
           </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6 border-t border-white/15 text-slate-100">
-            {(portalConfig.pillars || DEFAULT_PORTAL_CONFIG.pillars).map((pillar, idx) => (
-              <div key={idx}>
-                <div className="text-xs text-teal-300 mb-1">{pillar.title}</div>
-                <div className="text-sm font-medium">{pillar.subtitle}</div>
-              </div>
-            ))}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6 border-t border-white/20 text-white">
+            <div>
+              <div className="text-xs text-teal-100 mb-1">Chão de Fábrica</div>
+              <div className="text-sm font-medium">Lançamento guiado</div>
+            </div>
+            <div>
+              <div className="text-xs text-teal-100 mb-1">Rastreabilidade</div>
+              <div className="text-sm font-medium">Auditoria por usuário</div>
+            </div>
+            <div>
+              <div className="text-xs text-teal-100 mb-1">Gestão</div>
+              <div className="text-sm font-medium">Dashboards &amp; Excel</div>
+            </div>
           </div>
         </div>
       </div>
@@ -133,7 +128,7 @@ export function LoginScreen() {
             <div className="lg:hidden mb-5">
               <BrandMark variant="dark" size="md" />
             </div>
-            <h2 className="text-2xl font-display font-bold text-[#0a3832]">
+            <h2 className="text-2xl font-display font-bold text-[#0f2544]">
               {recoveryMode ? 'Recuperar acesso' : 'Acesso ao sistema'}
             </h2>
             <p className="text-sm text-slate-500 mt-1.5">
@@ -178,7 +173,7 @@ export function LoginScreen() {
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
                     placeholder="ex.: carlos.silva ou nome@forteflex.com.br"
-                    className="w-full min-h-[44px] pl-10 pr-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600 transition-colors"
+                    className="w-full min-h-[44px] pl-10 pr-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-colors"
                   />
                 </div>
               </div>
@@ -195,7 +190,7 @@ export function LoginScreen() {
                       setRecoveryMessage(null);
                       setRecoveryMode(true);
                     }}
-                    className="text-xs font-medium text-teal-700 hover:text-teal-800 focus-visible:outline-none focus-visible:underline"
+                    className="text-xs font-medium text-blue-600 hover:text-blue-700 focus-visible:outline-none focus-visible:underline"
                   >
                     Esqueci minha senha
                   </button>
@@ -209,13 +204,13 @@ export function LoginScreen() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Digite sua senha"
-                    className="w-full min-h-[44px] pl-10 pr-11 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600 transition-colors"
+                    className="w-full min-h-[44px] pl-10 pr-11 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-colors"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
                     aria-label={showPassword ? 'Ocultar senha' : 'Visualizar senha'}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-slate-700 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-slate-700 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -225,8 +220,7 @@ export function LoginScreen() {
               <button
                 type="submit"
                 disabled={submitting}
-                style={{ backgroundColor: submitting ? undefined : portalConfig.accentColor }}
-                className="w-full min-h-[46px] mt-2 px-4 py-2.5 bg-teal-700 hover:opacity-95 disabled:bg-teal-400 text-white font-medium text-sm rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-sm"
+                className="w-full min-h-[46px] mt-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium text-sm rounded-lg flex items-center justify-center gap-2 transition-colors cursor-pointer"
               >
                 <span>{submitting ? 'Autenticando...' : 'Entrar no sistema'}</span>
                 {!submitting && <ArrowRight className="w-4 h-4" />}
@@ -246,7 +240,7 @@ export function LoginScreen() {
                     value={recoveryIdentifier}
                     onChange={(e) => setRecoveryIdentifier(e.target.value)}
                     placeholder="ex.: carlos.silva"
-                    className="w-full min-h-[44px] pl-10 pr-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-600/20 focus:border-teal-600"
+                    className="w-full min-h-[44px] pl-10 pr-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                   />
                 </div>
               </div>
@@ -255,7 +249,7 @@ export function LoginScreen() {
                 <button
                   type="submit"
                   disabled={recoverySubmitting}
-                  className="flex-1 min-h-[44px] px-4 py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-medium text-sm rounded-lg transition-colors cursor-pointer"
+                  className="flex-1 min-h-[44px] px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm rounded-lg transition-colors cursor-pointer"
                 >
                   {recoverySubmitting ? 'Enviando...' : 'Solicitar redefinição'}
                 </button>
@@ -279,7 +273,7 @@ export function LoginScreen() {
             <button
               type="button"
               onClick={() => setShowDemoHelper((v) => !v)}
-              className="w-full flex items-center justify-between text-xs font-medium text-slate-600 hover:text-[#0a3832] py-1 cursor-pointer"
+              className="w-full flex items-center justify-between text-xs font-medium text-slate-600 hover:text-[#0f2544] py-1 cursor-pointer"
             >
               <span>Acessos iniciais de demonstração</span>
               <ChevronDown className={`w-4 h-4 transition-transform ${showDemoHelper ? 'rotate-180' : ''}`} />
@@ -293,50 +287,43 @@ export function LoginScreen() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                   <button
                     type="button"
-                    onClick={() => fillDemoAccount('ti', 'TI@2026')}
-                    className="text-left p-2.5 rounded-lg border border-teal-300 bg-teal-50/70 hover:bg-teal-100/70 transition-colors cursor-pointer sm:col-span-2"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="font-semibold text-teal-950 flex items-center gap-1.5">
-                        <span>Equipe de TI &amp; Suporte</span>
-                        <span className="text-[10px] px-1.5 py-0.2 bg-teal-700 text-white rounded font-normal">Central de OS</span>
-                      </div>
-                      <span className="text-[10px] text-teal-700 font-medium">Acesso Rápido</span>
-                    </div>
-                    <div className="font-mono text-[11px] text-teal-800 mt-0.5">ti / TI@2026 (ou ti@forteflex.com.br)</div>
-                  </button>
-
-                  <button
-                    type="button"
                     onClick={() => fillDemoAccount('admin', 'Forte@2026')}
-                    className="text-left p-2.5 rounded-lg border border-slate-200 hover:border-teal-300 hover:bg-teal-50/50 transition-colors cursor-pointer"
+                    className="text-left p-2.5 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors cursor-pointer"
                   >
-                    <div className="font-semibold text-[#0a3832]">Administrador</div>
+                    <div className="font-semibold text-[#0f2544]">Administrador</div>
                     <div className="font-mono text-[11px] text-slate-600 mt-0.5">admin / Forte@2026</div>
                   </button>
                   <button
                     type="button"
+                    onClick={() => fillDemoAccount('diretoria', 'Dir@2026')}
+                    className="text-left p-2.5 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                  >
+                    <div className="font-semibold text-[#0f2544]">Diretoria Executiva</div>
+                    <div className="font-mono text-[11px] text-slate-600 mt-0.5">diretoria / Dir@2026</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fillDemoAccount('gestor.extrusao', 'Gestor@2026')}
+                    className="text-left p-2.5 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                  >
+                    <div className="font-semibold text-[#0f2544]">Gestor (Extrusão)</div>
+                    <div className="font-mono text-[11px] text-slate-600 mt-0.5">gestor.extrusao / Gestor@2026</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fillDemoAccount('lider.cs', 'Lider@2026')}
+                    className="text-left p-2.5 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                  >
+                    <div className="font-semibold text-[#0f2544]">Líder (Corte/Solda)</div>
+                    <div className="font-mono text-[11px] text-slate-600 mt-0.5">lider.cs / Lider@2026</div>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => fillDemoAccount('carlos.silva', 'Prod@2026')}
-                    className="text-left p-2.5 rounded-lg border border-slate-200 hover:border-teal-300 hover:bg-teal-50/50 transition-colors cursor-pointer"
+                    className="sm:col-span-2 text-left p-2.5 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50/50 transition-colors cursor-pointer"
                   >
-                    <div className="font-semibold text-[#0a3832]">Extrusão (Operador)</div>
+                    <div className="font-semibold text-[#0f2544]">Produção (Operador)</div>
                     <div className="font-mono text-[11px] text-slate-600 mt-0.5">carlos.silva / Prod@2026</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => fillDemoAccount('mariana.costa', 'Prod@2026')}
-                    className="text-left p-2.5 rounded-lg border border-slate-200 hover:border-teal-300 hover:bg-teal-50/50 transition-colors cursor-pointer"
-                  >
-                    <div className="font-semibold text-[#0a3832]">Corte e Solda (Operador)</div>
-                    <div className="font-mono text-[11px] text-slate-600 mt-0.5">mariana.costa / Prod@2026</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => fillDemoAccount('joao.santos', 'Prod@2026')}
-                    className="text-left p-2.5 rounded-lg border border-slate-200 hover:border-teal-300 hover:bg-teal-50/50 transition-colors cursor-pointer"
-                  >
-                    <div className="font-semibold text-[#0a3832]">Impressão (Operador)</div>
-                    <div className="font-mono text-[11px] text-slate-600 mt-0.5">joao.santos / Prod@2026</div>
                   </button>
                 </div>
               </div>

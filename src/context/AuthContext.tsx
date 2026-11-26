@@ -1,12 +1,12 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { api, getStoredToken, setStoredToken } from '../lib/api';
+import { api, setStoredToken } from '../lib/api';
 import type { UserProfile } from '../types';
 
 interface AuthContextValue {
   user: UserProfile | null;
   loading: boolean;
   login: (identifier: string, password: string) => Promise<UserProfile>;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
 
@@ -17,13 +17,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState<boolean>(true);
 
   const refreshUser = useCallback(async () => {
-    const token = getStoredToken();
-    if (!token) {
-      setUser(null);
-      setLoading(false);
-      return;
-    }
-
     try {
       const res = await api.me();
       setUser(res.user);
@@ -46,9 +39,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return res.user;
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
     setStoredToken(null);
     setUser(null);
+    try {
+      await api.logout();
+    } catch {
+      // ignore cookie clear failure on network error
+    }
   }, []);
 
   return (

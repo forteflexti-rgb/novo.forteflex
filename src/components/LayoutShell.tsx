@@ -12,19 +12,27 @@ import {
   Menu,
   X,
   Tv,
-  LifeBuoy,
+  Gauge,
+  GitBranch,
+  Wrench,
+  AlertTriangle,
+  Bell,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import type { UserRole } from '../types';
 import { BrandMark } from './BrandMark';
-import { usePortalConfig, DEFAULT_PORTAL_CONFIG } from '../lib/portalConfig';
 
 export type AppRoute =
+  | 'irog-factory'
+  | 'irog-drilldown'
   | 'production-entry'
+  | 'downtimes'
+  | 'losses'
   | 'my-records'
-  | 'service-orders'
   | 'admin-dashboard'
   | 'admin-records'
   | 'admin-reports'
+  | 'admin-alerts'
   | 'admin-users'
   | 'admin-catalog'
   | 'admin-imports'
@@ -44,49 +52,108 @@ interface LayoutShellProps {
 }
 
 const ROUTE_TITLES: Record<AppRoute, { section: string; title: string }> = {
-  'production-entry': { section: 'Produção', title: 'Registro de Produção' },
+  'irog-factory': { section: 'IROG ForteFlex', title: 'Eficiência Geral da Fábrica' },
+  'irog-drilldown': { section: 'IROG ForteFlex', title: 'Análise Setor, Linha e Máquina' },
+  'production-entry': { section: 'Operações', title: 'Apontamento de Produção' },
+  downtimes: { section: 'Operações', title: 'Controle de Paradas' },
+  losses: { section: 'Operações', title: 'Perdas e Refugos' },
   'my-records': { section: 'Produção', title: 'Meus Registros' },
-  'service-orders': { section: 'Tecnologia & Suporte', title: 'Ordens de Serviço (OS)' },
-  'admin-dashboard': { section: 'Gestão Executiva', title: 'Dashboard Gerencial' },
-  'admin-records': { section: 'Operações', title: 'Todos os Registros' },
-  'admin-reports': { section: 'Análises', title: 'Relatórios e Exportação' },
+  'admin-dashboard': { section: 'Gestão Base', title: 'Dashboard de Produção' },
+  'admin-records': { section: 'Operações', title: 'Registros de Produção' },
+  'admin-reports': { section: 'Análises', title: 'Relatórios Gerenciais (14)' },
+  'admin-alerts': { section: 'Governança', title: 'Alertas e Auditoria IROG' },
   'admin-users': { section: 'Administração', title: 'Usuários e Permissões' },
-  'admin-catalog': { section: 'Administração', title: 'Cadastros Industriais' },
-  'admin-imports': { section: 'Integrações', title: 'Importação e ERP Iniflex' },
+  'admin-catalog': { section: 'Administração', title: 'Estrutura Industrial e Metas' },
+  'admin-imports': { section: 'Integrações', title: 'Importação e ERP Projedata' },
   'admin-settings': { section: 'Sistema', title: 'Configurações Gerais' },
   'admin-tv': { section: 'Gestão à Vista', title: 'Modo TV / Projeção' },
 };
 
+const ROLE_LABELS: Record<UserRole, string> = {
+  admin: 'Administrador da Empresa',
+  director: 'Diretoria Executiva',
+  manager: 'Gestor Industrial',
+  leader: 'Líder / Supervisor',
+  operator: 'Operador de Produção',
+};
+
+const ROLE_SHORT_LABELS: Record<UserRole, string> = {
+  admin: 'Administrador',
+  director: 'Diretoria',
+  manager: 'Gestor',
+  leader: 'Líder',
+  operator: 'Produção',
+};
+
 export function LayoutShell({ activeRoute, onNavigate, children }: LayoutShellProps) {
   const { user, logout } = useAuth();
-  const config = usePortalConfig();
-  const portalConfig = config || DEFAULT_PORTAL_CONFIG;
   const [mobileOpen, setMobileOpen] = useState(false);
 
   if (!user) return null;
 
-  const isAdmin = user.role === 'admin' || (user.role as any) === 'ti';
+  const role = user.role;
+  const canProjectTv = role === 'admin' || role === 'director';
 
-  const navItems: NavItem[] = isAdmin
-    ? [
-        { id: 'admin-dashboard', label: 'Dashboard Gerencial', icon: BarChart3 },
-        { id: 'service-orders', label: 'Ordens de Serviço (OS)', icon: LifeBuoy },
-        { id: 'admin-tv', label: 'Modo TV / Projeção', icon: Tv },
-        { id: 'admin-records', label: 'Registros de Produção', icon: ClipboardList },
-        { id: 'production-entry', label: 'Novo Lançamento', icon: ClipboardPlus },
-        { id: 'admin-reports', label: 'Relatórios', icon: FileSpreadsheet },
-        { id: 'admin-users', label: 'Usuários e Permissões', icon: Users },
-        { id: 'admin-catalog', label: 'Setores, Linhas e Turnos', icon: Settings2 },
-        { id: 'admin-imports', label: 'Importação e Iniflex', icon: UploadCloud },
-        { id: 'admin-settings', label: 'Configurações Gerais', icon: SlidersHorizontal },
-      ]
-    : [
-        { id: 'production-entry', label: 'Registrar Produção', icon: ClipboardPlus },
-        { id: 'service-orders', label: 'Chamados TI / Abrir OS', icon: LifeBuoy },
-        ...(user.permissions.can_view_own_records || user.permissions.can_view_sector_records
-          ? [{ id: 'my-records' as AppRoute, label: 'Meus Registros', icon: ClipboardList }]
-          : []),
-      ];
+  let navItems: NavItem[] = [];
+  if (role === 'admin') {
+    navItems = [
+      { id: 'irog-factory', label: 'Dashboard IROG Geral', icon: Gauge },
+      { id: 'irog-drilldown', label: 'Setor, Linha e Máquina', icon: GitBranch },
+      { id: 'admin-tv', label: 'Modo TV / Projeção', icon: Tv },
+      { id: 'production-entry', label: 'Apontar Produção', icon: ClipboardPlus },
+      { id: 'downtimes', label: 'Paradas em Linha', icon: Wrench },
+      { id: 'losses', label: 'Perdas e Refugos', icon: AlertTriangle },
+      { id: 'admin-records', label: 'Todos os Registros', icon: ClipboardList },
+      { id: 'admin-reports', label: 'Relatórios (14)', icon: FileSpreadsheet },
+      { id: 'admin-alerts', label: 'Alertas e Auditoria', icon: Bell },
+      { id: 'admin-dashboard', label: 'Painel Base Produção', icon: BarChart3 },
+      { id: 'admin-users', label: 'Usuários e Permissões', icon: Users },
+      { id: 'admin-catalog', label: 'Estrutura Industrial', icon: Settings2 },
+      { id: 'admin-imports', label: 'Importação e Projedata', icon: UploadCloud },
+      { id: 'admin-settings', label: 'Configurações Gerais', icon: SlidersHorizontal },
+    ];
+  } else if (role === 'director') {
+    navItems = [
+      { id: 'irog-factory', label: 'Dashboard IROG Geral', icon: Gauge },
+      { id: 'irog-drilldown', label: 'Setor, Linha e Máquina', icon: GitBranch },
+      { id: 'admin-tv', label: 'Modo TV / Projeção', icon: Tv },
+      { id: 'admin-records', label: 'Registros de Produção', icon: ClipboardList },
+      { id: 'admin-reports', label: 'Relatórios (14)', icon: FileSpreadsheet },
+      { id: 'admin-alerts', label: 'Alertas e Auditoria', icon: Bell },
+    ];
+  } else if (role === 'manager') {
+    navItems = [
+      { id: 'irog-factory', label: 'Dashboard IROG', icon: Gauge },
+      { id: 'irog-drilldown', label: 'Setor, Linha e Máquina', icon: GitBranch },
+      { id: 'downtimes', label: 'Paradas em Linha', icon: Wrench },
+      { id: 'losses', label: 'Perdas e Refugos', icon: AlertTriangle },
+      { id: 'admin-records', label: 'Registros do Setor', icon: ClipboardList },
+      { id: 'admin-reports', label: 'Relatórios (14)', icon: FileSpreadsheet },
+      { id: 'admin-alerts', label: 'Alertas Ativos', icon: Bell },
+    ];
+  } else if (role === 'leader') {
+    navItems = [
+      { id: 'irog-factory', label: 'Dashboard IROG', icon: Gauge },
+      { id: 'irog-drilldown', label: 'Setor, Linha e Máquina', icon: GitBranch },
+      { id: 'production-entry', label: 'Apontar Produção', icon: ClipboardPlus },
+      { id: 'downtimes', label: 'Paradas em Linha', icon: Wrench },
+      { id: 'losses', label: 'Perdas e Refugos', icon: AlertTriangle },
+      { id: 'admin-records', label: 'Registros do Setor', icon: ClipboardList },
+    ];
+  } else {
+    navItems = [
+      { id: 'production-entry', label: 'Registrar Produção', icon: ClipboardPlus },
+      ...(user.permissions.can_register_downtime !== false
+        ? [{ id: 'downtimes' as AppRoute, label: 'Registrar Parada', icon: Wrench }]
+        : []),
+      ...(user.permissions.can_register_losses !== false
+        ? [{ id: 'losses' as AppRoute, label: 'Registrar Perdas', icon: AlertTriangle }]
+        : []),
+      ...(user.permissions.can_view_own_records || user.permissions.can_view_sector_records
+        ? [{ id: 'my-records' as AppRoute, label: 'Meus Registros', icon: ClipboardList }]
+        : []),
+    ];
+  }
 
   const meta = ROUTE_TITLES[activeRoute];
 
@@ -106,20 +173,19 @@ export function LayoutShell({ activeRoute, onNavigate, children }: LayoutShellPr
         />
       )}
 
-      {/* Institutional Sea Green / Teal Sidebar */}
+      {/* Institutional Navy Sidebar */}
       <aside
-        style={{ backgroundColor: portalConfig.accentColor }}
-        className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-[#0a3832] text-slate-100 flex flex-col shrink-0 transition-transform duration-200 shadow-xl lg:shadow-none border-r border-black/15 ${
+        className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-[#0f2544] text-slate-100 flex flex-col shrink-0 transition-transform duration-200 ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
-        <div className="h-16 px-5 flex items-center justify-between border-b border-teal-500/15 shrink-0 bg-[#082e29]/40">
+        <div className="h-16 px-5 flex items-center justify-between border-b border-white/10 shrink-0">
           <BrandMark variant="light" size="md" />
           <button
             type="button"
             onClick={() => setMobileOpen(false)}
             aria-label="Fechar menu"
-            className="lg:hidden p-1.5 text-teal-200 hover:text-white rounded-md"
+            className="lg:hidden p-1.5 text-slate-300 hover:text-white rounded-md"
           >
             <X className="w-5 h-5" />
           </button>
@@ -134,23 +200,23 @@ export function LayoutShell({ activeRoute, onNavigate, children }: LayoutShellPr
                 key={item.id}
                 type="button"
                 onClick={() => handleSelect(item.id)}
-                className={`w-full min-h-[42px] px-3.5 py-2.5 rounded-lg flex items-center gap-3 text-sm font-medium transition-colors whitespace-nowrap cursor-pointer ${
+                className={`w-full min-h-[40px] px-3.5 py-2 rounded-lg flex items-center gap-3 text-sm font-medium transition-colors whitespace-nowrap cursor-pointer ${
                   active
-                    ? 'bg-teal-600 text-white shadow-sm shadow-teal-950/40'
-                    : 'text-teal-100/80 hover:bg-white/10 hover:text-white'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-slate-300 hover:bg-white/10 hover:text-white'
                 }`}
               >
-                <Icon className="w-4 h-4 shrink-0 text-teal-300" />
+                <Icon className="w-4 h-4 shrink-0" />
                 <span className="truncate">{item.label}</span>
               </button>
             );
           })}
         </nav>
 
-        <div className="p-4 border-t border-teal-500/15 bg-[#082e29]/50 text-xs text-teal-100/80 space-y-1">
+        <div className="p-4 border-t border-white/10 text-xs text-slate-300 space-y-1">
           <div className="font-medium text-white truncate">{user.full_name}</div>
-          <div className="text-teal-300/80 truncate">
-            {isAdmin ? 'Administrador da Empresa' : 'Operador de Produção'}
+          <div className="text-slate-400 truncate">
+            {ROLE_LABELS[role]}
             {user.sector_name ? ` · ${user.sector_name}` : ''}
           </div>
         </div>
@@ -180,13 +246,13 @@ export function LayoutShell({ activeRoute, onNavigate, children }: LayoutShellPr
             <div className="hidden md:flex items-center gap-2 text-xs text-slate-600 whitespace-nowrap mr-1">
               <span className="font-medium text-slate-900">{user.full_name}</span>
               <span className="text-slate-300" aria-hidden="true">·</span>
-              <span>{isAdmin ? 'Administrador' : 'Produção'}</span>
+              <span>{ROLE_SHORT_LABELS[role]}</span>
             </div>
-            {isAdmin && (
+            {canProjectTv && (
               <button
                 type="button"
                 onClick={() => handleSelect('admin-tv')}
-                className="min-h-[38px] px-3.5 py-1.5 rounded-lg bg-[#0a3832] hover:bg-[#0f4f46] text-white text-xs font-medium inline-flex items-center gap-2 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                className="min-h-[38px] px-3.5 py-1.5 rounded-lg bg-[#0f2544] hover:bg-[#17345e] text-white text-xs font-medium inline-flex items-center gap-2 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
                 <Tv className="w-3.5 h-3.5" />
                 <span>Projetar na TV</span>
@@ -194,7 +260,7 @@ export function LayoutShell({ activeRoute, onNavigate, children }: LayoutShellPr
             )}
             <button
               type="button"
-              onClick={logout}
+              onClick={() => void logout()}
               className="min-h-[38px] px-3.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-medium inline-flex items-center gap-2 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
             >
               <LogOut className="w-3.5 h-3.5" />
@@ -210,3 +276,4 @@ export function LayoutShell({ activeRoute, onNavigate, children }: LayoutShellPr
     </div>
   );
 }
+

@@ -4,19 +4,6 @@ import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import type { CatalogData, ProductionRecord } from '../types';
 
-const DOWNTIME_REASONS = [
-  'Setup / troca de ferramenta ou clichê',
-  'Troca de tela / filtro',
-  'Ajuste mecânico / faca',
-  'Manutenção corretiva elétrica',
-  'Manutenção preventiva programada',
-  'Falta de matéria-prima / bobina',
-  'Queda ou oscilação de energia',
-  'Limpeza e higienização de linha',
-  'Aguardando controle de qualidade',
-  'Outro motivo',
-];
-
 interface ProductionFormProps {
   catalog: CatalogData;
   onRecordSaved?: (record: ProductionRecord) => void;
@@ -24,7 +11,7 @@ interface ProductionFormProps {
 
 export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) {
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const canSelectOperator = user?.role === 'admin' || user?.role === 'leader';
   const today = new Date().toISOString().slice(0, 10);
 
   const defaultSectorId = useMemo(() => {
@@ -39,7 +26,12 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
   const [operatorId, setOperatorId] = useState(user?.id || '');
   const [sectorId, setSectorId] = useState(defaultSectorId);
   const [lineId, setLineId] = useState('');
+  const [machineId, setMachineId] = useState('');
+  const [stageId, setStageId] = useState('');
+  const [orderId, setOrderId] = useState('');
   const [productId, setProductId] = useState(catalog.products[0]?.id || '');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
 
   const [plannedQty, setPlannedQty] = useState('');
   const [producedQty, setProducedQty] = useState('');
@@ -49,14 +41,12 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
 
   const [hasDowntime, setHasDowntime] = useState(false);
   const [downtimeMinutes, setDowntimeMinutes] = useState('');
-  const [downtimeReason, setDowntimeReason] = useState(DOWNTIME_REASONS[0]);
+  const [downtimeReasonId, setDowntimeReasonId] = useState(catalog.downtimeReasons[0]?.id || 'custom');
   const [customReason, setCustomReason] = useState('');
   const [downtimeDescription, setDowntimeDescription] = useState('');
 
   const [notes, setNotes] = useState('');
   const [additionalNotes, setAdditionalNotes] = useState('');
-  const [opNumber, setOpNumber] = useState('');
-  const [bobinaNumber, setBobinaNumber] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +55,27 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
   const availableLines = useMemo(
     () => catalog.lines.filter((l) => l.sector_id === sectorId && l.active),
     [catalog.lines, sectorId]
+  );
+
+  const availableMachines = useMemo(
+    () =>
+      catalog.machines.filter(
+        (m) => m.active && m.sector_id === sectorId && (!lineId || !m.line_id || m.line_id === lineId)
+      ),
+    [catalog.machines, sectorId, lineId]
+  );
+
+  const availableStages = useMemo(
+    () => catalog.stages.filter((st) => st.active && (!st.sector_id || st.sector_id === sectorId)),
+    [catalog.stages, sectorId]
+  );
+
+  const availableOrders = useMemo(
+    () =>
+      catalog.orders.filter(
+        (o) => (o.status === 'open' || o.status === 'in_progress') && o.sector_id === sectorId
+      ),
+    [catalog.orders, sectorId]
   );
 
   useEffect(() => {
@@ -76,11 +87,35 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
   }, [availableLines, lineId]);
 
   useEffect(() => {
+    if (availableMachines.length > 0 && !availableMachines.some((m) => m.id === machineId)) {
+      setMachineId(availableMachines[0].id);
+    } else if (availableMachines.length === 0) {
+      setMachineId('');
+    }
+  }, [availableMachines, machineId]);
+
+  useEffect(() => {
     const prod = catalog.products.find((p) => p.id === productId);
     if (prod) {
       setUnitOfMeasure(prod.unit_of_measure);
     }
   }, [productId, catalog.products]);
+
+  useEffect(() => {
+    if (!orderId) return;
+    const op = catalog.orders.find((o) => o.id === orderId);
+    if (op) {
+      setProductId(op.product_id);
+      if (op.line_id) setLineId(op.line_id);
+      if (op.machine_id) setMachineId(op.machine_id);
+      if (!plannedQty) setPlannedQty(String(op.planned_quantity));
+    }
+  }, [orderId, catalog.orders, plannedQty]);
+
+  const activeStandard = useMemo(() => {
+    if (!machineId || !productId) return null;
+    return catalog.cycleStandards.find((c) => c.machine_id === machineId && c.product_id === productId && c.is_current) || null;
+  }, [catalog.cycleStandards, machineId, productId]);
 
   const handleProducedOrLossChange = (nextProduced: string, nextLoss: string) => {
     setProducedQty(nextProduced);
@@ -97,6 +132,10 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
     setShiftId(catalog.shifts[0]?.id || '');
     setOperatorId(user?.id || '');
     setSectorId(defaultSectorId);
+    setOrderId('');
+    setStageId('');
+    setStartTime('');
+    setEndTime('');
     setProductId(catalog.products[0]?.id || '');
     setPlannedQty('');
     setProducedQty('');
@@ -104,13 +143,11 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
     setLossQty('0');
     setHasDowntime(false);
     setDowntimeMinutes('');
-    setDowntimeReason(DOWNTIME_REASONS[0]);
+    setDowntimeReasonId(catalog.downtimeReasons[0]?.id || 'custom');
     setCustomReason('');
     setDowntimeDescription('');
     setNotes('');
     setAdditionalNotes('');
-    setOpNumber('');
-    setBobinaNumber('');
     setError(null);
   };
 
@@ -133,7 +170,14 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
       setError('Informe uma quantidade planejada maior que zero.');
       return;
     }
-    if (!Number.isFinite(produced) || produced < 0 || !Number.isFinite(approved) || approved < 0 || !Number.isFinite(loss) || loss < 0) {
+    if (
+      !Number.isFinite(produced) ||
+      produced < 0 ||
+      !Number.isFinite(approved) ||
+      approved < 0 ||
+      !Number.isFinite(loss) ||
+      loss < 0
+    ) {
       setError('As quantidades produzida, aprovada e de perdas devem ser valores válidos não negativos.');
       return;
     }
@@ -142,7 +186,10 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
       return;
     }
 
-    const finalReason = downtimeReason === 'Outro motivo' ? customReason.trim() : downtimeReason;
+    const selectedDtReason = catalog.downtimeReasons.find((r) => r.id === downtimeReasonId);
+    const finalReason =
+      downtimeReasonId === 'custom' ? customReason.trim() : selectedDtReason?.name || '';
+
     if (hasDowntime) {
       const dtMin = Number(downtimeMinutes);
       if (!Number.isFinite(dtMin) || dtMin <= 0) {
@@ -155,29 +202,31 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
       }
     }
 
-    const finalNotes = opNumber.trim()
-      ? `[OP: ${opNumber.trim()}${bobinaNumber.trim() ? ` - Bobina ${bobinaNumber.trim()}` : ''}] ${notes.trim()}`.trim()
-      : notes.trim();
-
     setSubmitting(true);
     try {
       const res = await api.createProductionRecord({
         production_date: productionDate,
         shift_id: shiftId,
-        operator_id: isAdmin ? operatorId : undefined,
+        operator_id: canSelectOperator ? operatorId : undefined,
         sector_id: sectorId,
         line_id: lineId,
+        machine_id: machineId || null,
+        stage_id: stageId || null,
+        production_order_id: orderId || null,
         product_id: productId,
         planned_quantity: planned,
         produced_quantity: produced,
         approved_quantity: approved,
         loss_quantity: loss,
         unit_of_measure: unitOfMeasure,
+        start_time: startTime || null,
+        end_time: endTime || null,
         has_downtime: hasDowntime,
         total_downtime_minutes: hasDowntime ? Number(downtimeMinutes) : 0,
+        downtime_reason_id: hasDowntime && selectedDtReason ? selectedDtReason.id : null,
         downtime_reason: hasDowntime ? finalReason : undefined,
         downtime_description: hasDowntime ? downtimeDescription : undefined,
-        notes: finalNotes,
+        notes,
         additional_notes: additionalNotes,
       });
 
@@ -192,12 +241,9 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       {savedRecord && (
-        <div
-          role="status"
-          className="bg-white border border-emerald-300 rounded-xl p-6 space-y-4"
-        >
+        <div role="status" className="bg-white border border-emerald-300 rounded-xl p-6 space-y-4">
           <div className="flex items-start gap-3">
             <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0 mt-0.5" />
             <div className="flex-1">
@@ -216,14 +262,18 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-3 border-t border-emerald-100 text-sm">
             <div>
-              <div className="text-xs text-slate-500">Setor / Linha</div>
+              <div className="text-xs text-slate-500">Setor / Linha / Máquina</div>
               <div className="font-medium text-slate-900 mt-0.5">
                 {savedRecord.sector_name} · {savedRecord.line_name}
+                {savedRecord.machine_name ? ` · ${savedRecord.machine_name}` : ''}
               </div>
             </div>
             <div>
-              <div className="text-xs text-slate-500">Produto</div>
-              <div className="font-medium text-slate-900 mt-0.5">{savedRecord.product_name}</div>
+              <div className="text-xs text-slate-500">Produto / OP</div>
+              <div className="font-medium text-slate-900 mt-0.5">
+                {savedRecord.product_name}
+                {savedRecord.order_number ? ` (${savedRecord.order_number})` : ''}
+              </div>
             </div>
             <div>
               <div className="text-xs text-slate-500">Produzido / Aprovado</div>
@@ -242,23 +292,27 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
       )}
 
       {error && (
-        <div
-          role="alert"
-          className="p-4 rounded-xl bg-red-50 border border-red-200 flex items-start gap-3 text-sm text-red-800"
-        >
+        <div role="alert" className="p-4 rounded-xl bg-red-50 border border-red-200 flex items-start gap-3 text-sm text-red-800">
           <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
           <span>{error}</span>
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* SEÇÃO 1: IDENTIFICAÇÃO */}
+        {/* SEÇÃO 1: IDENTIFICAÇÃO INDUSTRIAL (4 NÍVEIS + OP + HORÁRIO) */}
         <section className="bg-white border border-slate-200 rounded-xl p-5 sm:p-7">
-          <div className="mb-5 pb-3 border-b border-slate-100">
-            <h2 className="text-base font-display font-bold text-[#0f2544]">01. Identificação</h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Dados operacionais de turno, equipe, setor e produto fabricado.
-            </p>
+          <div className="mb-5 pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h2 className="text-base font-display font-bold text-[#0f2544]">01. Identificação e Recurso Industrial</h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Dados de turno, setor, linha, máquina/recurso, operação, ordem de produção e produto.
+              </p>
+            </div>
+            {activeStandard && (
+              <div className="text-xs font-mono tabular-nums text-slate-600 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg">
+                Ciclo padrão ativo: <strong className="text-[#0f2544]">{activeStandard.theoretical_capacity_per_hour} {unitOfMeasure}/h</strong>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -299,14 +353,14 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
               <label htmlFor="prod-operator" className="block text-sm font-medium text-slate-700 mb-1.5">
                 Funcionário responsável *
               </label>
-              {isAdmin ? (
+              {canSelectOperator ? (
                 <select
                   id="prod-operator"
                   value={operatorId}
                   onChange={(e) => setOperatorId(e.target.value)}
                   className="w-full min-h-[46px] px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                 >
-                  {(catalog.operators || []).filter((o) => o.is_active).map((o) => (
+                  {catalog.operators.filter((o) => o.is_active).map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.full_name}
                     </option>
@@ -331,7 +385,10 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
                 id="prod-sector"
                 required
                 value={sectorId}
-                onChange={(e) => setSectorId(e.target.value)}
+                onChange={(e) => {
+                  setSectorId(e.target.value);
+                  setOrderId('');
+                }}
                 className="w-full min-h-[46px] px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
               >
                 {catalog.sectors.filter((s) => s.active).map((s) => (
@@ -366,6 +423,66 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
             </div>
 
             <div>
+              <label htmlFor="prod-machine" className="block text-sm font-medium text-slate-700 mb-1.5">
+                Máquina / Recurso
+              </label>
+              <select
+                id="prod-machine"
+                value={machineId}
+                onChange={(e) => setMachineId(e.target.value)}
+                className="w-full min-h-[46px] px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+              >
+                {availableMachines.length === 0 ? (
+                  <option value="">Nenhuma máquina cadastrada</option>
+                ) : (
+                  availableMachines.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.code} — {m.name}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="prod-order" className="block text-sm font-medium text-slate-700 mb-1.5">
+                Ordem de Produção (OP)
+              </label>
+              <select
+                id="prod-order"
+                value={orderId}
+                onChange={(e) => setOrderId(e.target.value)}
+                className="w-full min-h-[46px] px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+              >
+                <option value="">Lançamento avulso (sem OP)</option>
+                {availableOrders.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.order_number} · {o.product_name} ({o.planned_quantity})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="prod-stage" className="block text-sm font-medium text-slate-700 mb-1.5">
+                Operação / Etapa
+              </label>
+              <select
+                id="prod-stage"
+                value={stageId}
+                onChange={(e) => setStageId(e.target.value)}
+                className="w-full min-h-[46px] px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+              >
+                <option value="">Etapa padrão da linha</option>
+                {availableStages.map((st) => (
+                  <option key={st.id} value={st.id}>
+                    {st.code} — {st.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
               <label htmlFor="prod-product" className="block text-sm font-medium text-slate-700 mb-1.5">
                 Produto produzido *
               </label>
@@ -385,30 +502,28 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
             </div>
 
             <div>
-              <label htmlFor="prod-op" className="block text-sm font-medium text-slate-700 mb-1.5">
-                Nº da Ordem de Produção (OP)
+              <label htmlFor="prod-start-time" className="block text-sm font-medium text-slate-700 mb-1.5">
+                Hora inicial (opcional)
               </label>
               <input
-                id="prod-op"
-                type="text"
-                placeholder="Ex.: 11344"
-                value={opNumber}
-                onChange={(e) => setOpNumber(e.target.value)}
+                id="prod-start-time"
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
                 className="w-full min-h-[46px] px-3.5 py-2.5 text-sm font-mono bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
               />
             </div>
 
             <div>
-              <label htmlFor="prod-bobina" className="block text-sm font-medium text-slate-700 mb-1.5">
-                Identificador / Bobina (Iniflex)
+              <label htmlFor="prod-end-time" className="block text-sm font-medium text-slate-700 mb-1.5">
+                Hora final (opcional)
               </label>
               <input
-                id="prod-bobina"
-                type="text"
-                placeholder="Ex.: 1, 2, Bobina 03"
-                value={bobinaNumber}
-                onChange={(e) => setBobinaNumber(e.target.value)}
-                className="w-full min-h-[46px] px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+                id="prod-end-time"
+                type="time"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                className="w-full min-h-[46px] px-3.5 py-2.5 text-sm font-mono bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
               />
             </div>
           </div>
@@ -502,10 +617,9 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
                 onChange={(e) => setUnitOfMeasure(e.target.value)}
                 className="w-full min-h-[48px] px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
               >
-                <option value="kg">kg (Quilogramas / Peso Líquido)</option>
-                <option value="mil">mil (Milheiros de Sacos)</option>
-                <option value="mt">mt (Metros Lineares de Filme)</option>
+                <option value="kg">kg (Quilogramas)</option>
                 <option value="un">un (Unidades)</option>
+                <option value="m">m (Metros)</option>
                 <option value="bob">bob (Bobinas)</option>
                 <option value="cx">cx (Caixas)</option>
               </select>
@@ -519,7 +633,7 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
             <div>
               <h2 className="text-base font-display font-bold text-[#0f2544]">03. Paradas</h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Registre interrupções mecânicas, elétricas, setups ou faltas de material durante o turno.
+                Registre interrupções durante o turno conforme classificação IROG (planejada ou não-planejada).
               </p>
             </div>
 
@@ -574,20 +688,23 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
                   <Wrench className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <select
                     id="dt-reason"
-                    value={downtimeReason}
-                    onChange={(e) => setDowntimeReason(e.target.value)}
+                    value={downtimeReasonId}
+                    onChange={(e) => setDowntimeReasonId(e.target.value)}
                     className="w-full min-h-[46px] pl-10 pr-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
                   >
-                    {DOWNTIME_REASONS.map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ))}
+                    {catalog.downtimeReasons
+                      .filter((r) => r.active)
+                      .map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.code} — {r.name} ({r.is_planned ? 'Planejada' : 'Não planejada'})
+                        </option>
+                      ))}
+                    <option value="custom">Outro motivo (especificar)</option>
                   </select>
                 </div>
               </div>
 
-              {downtimeReason === 'Outro motivo' && (
+              {downtimeReasonId === 'custom' && (
                 <div className="sm:col-span-2">
                   <label htmlFor="dt-custom-reason" className="block text-sm font-medium text-slate-700 mb-1.5">
                     Especifique o motivo *
@@ -620,7 +737,7 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
             </div>
           ) : (
             <p className="text-sm text-slate-500">
-              Operação contínua registrada sem paradas neste lançamento. Caso tenha ocorrido interrupção, selecione "Houve parada" acima.
+              Operação contínua registrada sem paradas neste lançamento. Caso tenha ocorrido interrupção, selecione "Houve parada" acima ou utilize o módulo de Paradas em tempo real.
             </p>
           )}
         </section>
