@@ -17,7 +17,7 @@
  * sem misturar grandezas. Dado ausente NUNCA vira zero: o grão fica "pending" com o motivo.
  */
 
-export const IROG_CALC_VERSION = 'irog-1.1.0';
+export const IROG_CALC_VERSION = 'irog-1.2.0';
 
 export type StandardType = 'rate_per_hour' | 'cycle_seconds';
 
@@ -120,6 +120,9 @@ export type PendingCode =
   | 'PESO_AUSENTE'
   | 'VALOR_INVALIDO';
 
+/** Componente do IROG que a pendência impede de calcular. */
+export type PendingComponent = 'time' | 'performance' | 'quality' | 'all';
+
 export interface PendingReason {
   code: PendingCode;
   message: string;
@@ -127,7 +130,22 @@ export interface PendingReason {
   required: string;
   affectedRecords: number;
   recordIds: string[];
+  component: PendingComponent;
 }
+
+const COMPONENT_OF: Record<PendingCode, PendingComponent> = {
+  CALENDARIO_AUSENTE: 'time',
+  SEM_TEMPO_PROGRAMADO: 'time',
+  PARADA_SEM_CLASSIFICACAO: 'time',
+  PARADAS_EXCEDEM_CALENDARIO: 'time',
+  APONTAMENTO_DURACAO_INVALIDA: 'time',
+  PADRAO_AUSENTE: 'performance',
+  UNIDADE_INCOMPATIVEL: 'performance',
+  PERDA_SEM_PRODUCAO_CORRESPONDENTE: 'quality',
+  PERDA_MAIOR_QUE_PRODUCAO: 'quality',
+  PESO_AUSENTE: 'quality',
+  VALOR_INVALIDO: 'all',
+};
 
 export type WarningCode = 'PERFORMANCE_ACIMA_100' | 'SEM_PRODUCAO' | 'PRODUCAO_FORA_DO_CALENDARIO' | 'PARADA_NAO_APONTADA';
 
@@ -158,6 +176,8 @@ export interface IrogResult {
   date: string;
   shiftId: string | null;
   status: 'ok' | 'pending';
+  /** Quais componentes são válidos neste grão (mesmo com outras pendências). */
+  components: { availability: boolean; performance: boolean; quality: boolean };
   availability: number | null; // 0..1
   performance: number | null;
   quality: number | null;
@@ -202,13 +222,17 @@ export function idealMinutesFor(quantity: number, std: ResourceStandard): number
   return std.type === 'rate_per_hour' ? (quantity / std.value) * 60 : (quantity * std.value) / 60;
 }
 
-function addPending(list: PendingReason[], reason: Omit<PendingReason, 'affectedRecords'>) {
-  const existing = list.find((p) => p.code === reason.code && p.required === reason.required);
+function addPending(
+  list: PendingReason[],
+  reason: Omit<PendingReason, 'affectedRecords' | 'component'> & { component?: PendingComponent },
+) {
+  const component = reason.component ?? COMPONENT_OF[reason.code];
+  const existing = list.find((p) => p.code === reason.code && p.required === reason.required && p.component === component);
   if (existing) {
     for (const id of reason.recordIds) if (!existing.recordIds.includes(id)) existing.recordIds.push(id);
     existing.affectedRecords = existing.recordIds.length;
   } else {
-    list.push({ ...reason, affectedRecords: reason.recordIds.length });
+    list.push({ ...reason, component, affectedRecords: reason.recordIds.length });
   }
 }
 
@@ -390,6 +414,7 @@ export function calculateIrogGrain(input: IrogGrainInput): IrogResult {
     const nonKgLoss = input.losses.filter((l) => norm(l.unit) !== 'kg').map((l) => l.id);
     if (nonKgLoss.length > 0) {
       addPending(pending, {
+        component: 'quality',
         code: 'UNIDADE_INCOMPATIVEL',
         message: 'Qualidade por peso exige perdas em kg.',
         required: 'Perda informada em kg',
@@ -428,6 +453,7 @@ export function calculateIrogGrain(input: IrogGrainInput): IrogResult {
     const std = l.productId !== null || stds.size === 1 ? lookup(l.productId ?? matching[0].productId, l.stepId ?? matching[0].stepId) : null;
     if (!std) {
       addPending(pending, {
+        component: 'quality',
         code: stds.size > 1 ? 'UNIDADE_INCOMPATIVEL' : 'PADRAO_AUSENTE',
         message: stds.size > 1
           ? 'Perda sem produto em grão com produtos de padrões diferentes: não é possível converter.'
@@ -439,6 +465,7 @@ export function calculateIrogGrain(input: IrogGrainInput): IrogResult {
     }
     if (norm(std.unit) !== norm(l.unit)) {
       addPending(pending, {
+        component: 'quality',
         code: 'UNIDADE_INCOMPATIVEL',
         message: `Perda em "${l.unit}" e padrão em "${std.unit}".`,
         required: `Padrão produtivo na unidade ${l.unit}`,
@@ -476,9 +503,18 @@ export function calculateIrogGrain(input: IrogGrainInput): IrogResult {
     unrecordedStopMinutes,
     producedWeightKg,
     lossWeightKg,
-    idealMinutes: pending.length === 0 ? idealMinutes : null,
-    idealGoodMinutes: pending.length === 0 ? idealGoodMinutes : null,
+    idealMinutes: null,
+    idealGoodMinutes: null,
   };
+
+  // ---- Validade por componente ----
+  const blocks = (c: PendingComponent) => pending.some((p) => p.component === c || p.component === 'all');
+  const timeOk =
+    !blocks('time') && scheduledMinutes !== null && operatingMinutes !== null && scheduledMinutes > 0 && operatingMinutes >= 0;
+  const perfOk = timeOk && !blocks('performance');
+  const qualOk = !blocks('quality') && (basis === 'weight' || perfOk);
+  totals.idealMinutes = perfOk ? idealMinutes : null;
+  totals.idealGoodMinutes = perfOk && qualOk ? idealGoodMinutes : null;
 
   const base = {
     resourceId: input.resourceId,
@@ -492,23 +528,28 @@ export function calculateIrogGrain(input: IrogGrainInput): IrogResult {
     calcVersion: IROG_CALC_VERSION,
   };
 
-  if (pending.length > 0 || scheduledMinutes === null || operatingMinutes === null || scheduledMinutes <= 0) {
-    // Recurso sem programação e sem produção: grão legítimo "fora de operação", sem IROG.
-    return { ...base, status: pending.length > 0 ? 'pending' : 'ok', availability: null, performance: null, quality: null, irog: null };
-  }
-
-  const availability = operatingMinutes / scheduledMinutes;
-  const performance = operatingMinutes > 0 ? idealMinutes / operatingMinutes : null;
-  const quality = idealMinutes > 0 ? idealGoodMinutes / idealMinutes : null;
+  // Cada componente é calculado quando os SEUS dados são válidos; o IROG só sem nenhuma pendência.
+  // Grão sem programação e sem produção ("fora de operação") fica com tudo nulo e status ok.
+  const availability = timeOk ? (operatingMinutes as number) / (scheduledMinutes as number) : null;
+  const performance = perfOk && (operatingMinutes as number) > 0 ? idealMinutes / (operatingMinutes as number) : null;
+  const quality = !qualOk ? null : basis === 'weight' ? weightQuality : idealMinutes > 0 ? idealGoodMinutes / idealMinutes : null;
   if (performance !== null && performance > 1) {
     warnings.push({
       code: 'PERFORMANCE_ACIMA_100',
       message: `Performance de ${(performance * 100).toFixed(1)}%: o padrão produtivo pode estar subestimado.`,
     });
   }
-  const irog = idealGoodMinutes / scheduledMinutes;
+  const irog = pending.length === 0 && timeOk ? idealGoodMinutes / (scheduledMinutes as number) : null;
 
-  return { ...base, status: 'ok', availability, performance, quality, irog };
+  return {
+    ...base,
+    status: pending.length > 0 ? 'pending' : 'ok',
+    components: { availability: timeOk, performance: perfOk, quality: qualOk },
+    availability,
+    performance,
+    quality,
+    irog,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -532,47 +573,76 @@ export interface IrogConsolidated {
 }
 
 /**
- * Consolida grãos somando tempos (nunca média de percentuais). Só grãos "ok" entram nos indicadores;
- * os pendentes são contados para que a tela mostre a cobertura e os motivos.
+ * Consolida grãos somando tempos (nunca média de percentuais), componente a componente:
+ *  - Disponibilidade: grãos com tempo válido (calendário, paradas e horários ok);
+ *  - Performance: grãos com tempo e padrão produtivo válidos;
+ *  - Qualidade: grãos com peso/perdas válidos (kg produzido − kg perdido) ÷ kg produzido;
+ *  - IROG: SOMENTE quando nenhum grão do escopo tem pendência — senão fica nulo (pendente), nunca
+ *    calculado só com a parte que sobrou (ex.: só os dias parados daria IROG 0, o que é falso).
  */
 export function consolidateIrog(results: IrogResult[]): IrogConsolidated {
-  let scheduled = 0;
-  let operating = 0;
-  let ideal = 0;
-  let idealGood = 0;
-  let pendingScheduled = 0;
+  let schedA = 0;
+  let operA = 0;
+  let operP = 0;
+  let idealP = 0;
+  let prodKg = 0;
+  let lossKg = 0;
+  let idealQ = 0;
+  let goodQ = 0;
+  let schedI = 0;
+  let goodI = 0;
+  let totalScheduled = 0;
   let okGrains = 0;
+  let pendingGrains = 0;
   const pendingByCode: Partial<Record<PendingCode, number>> = {};
 
   for (const r of results) {
+    const t = r.totals;
+    totalScheduled += t.scheduledMinutes && t.scheduledMinutes > 0 ? t.scheduledMinutes : 0;
     if (r.status === 'pending') {
-      pendingScheduled += r.totals.scheduledMinutes ?? 0;
+      pendingGrains++;
       // motivos sem registro associado (ex.: calendário ausente) contam 1 por grão
       for (const p of r.pending) pendingByCode[p.code] = (pendingByCode[p.code] ?? 0) + Math.max(1, p.affectedRecords);
-      continue;
     }
-    if (r.irog === null) continue; // fora de operação
-    okGrains++;
-    scheduled += r.totals.scheduledMinutes ?? 0;
-    operating += r.totals.operatingMinutes ?? 0;
-    ideal += r.totals.idealMinutes ?? 0;
-    idealGood += r.totals.idealGoodMinutes ?? 0;
+    if (r.components.availability) {
+      schedA += t.scheduledMinutes ?? 0;
+      operA += t.operatingMinutes ?? 0;
+    }
+    if (r.components.performance) {
+      operP += t.operatingMinutes ?? 0;
+      idealP += t.idealMinutes ?? 0;
+    }
+    if (r.components.quality) {
+      if (t.producedWeightKg !== null) {
+        prodKg += t.producedWeightKg;
+        lossKg += t.lossWeightKg ?? 0;
+      } else if (t.idealMinutes !== null && t.idealGoodMinutes !== null) {
+        idealQ += t.idealMinutes;
+        goodQ += t.idealGoodMinutes;
+      }
+    }
+    if (r.status === 'ok' && r.irog !== null) {
+      okGrains++;
+      schedI += t.scheduledMinutes ?? 0;
+      goodI += t.idealGoodMinutes ?? 0;
+    }
   }
 
-  const totalScheduled = scheduled + pendingScheduled;
+  const complete = pendingGrains === 0;
+  const quality = prodKg > 0 ? (prodKg - lossKg) / prodKg : idealQ > 0 ? goodQ / idealQ : null;
   return {
     grains: results.length,
     okGrains,
-    pendingGrains: results.filter((r) => r.status === 'pending').length,
-    coverage: totalScheduled > 0 ? scheduled / totalScheduled : null,
-    scheduledMinutes: scheduled,
-    operatingMinutes: operating,
-    idealMinutes: ideal,
-    idealGoodMinutes: idealGood,
-    availability: scheduled > 0 ? operating / scheduled : null,
-    performance: operating > 0 ? ideal / operating : null,
-    quality: ideal > 0 ? idealGood / ideal : null,
-    irog: scheduled > 0 ? idealGood / scheduled : null,
+    pendingGrains,
+    coverage: totalScheduled > 0 ? schedI / totalScheduled : null,
+    scheduledMinutes: schedA,
+    operatingMinutes: operA,
+    idealMinutes: idealP,
+    idealGoodMinutes: goodI,
+    availability: schedA > 0 ? operA / schedA : null,
+    performance: operP > 0 ? idealP / operP : null,
+    quality,
+    irog: complete && schedI > 0 ? goodI / schedI : null,
     pendingByCode,
   };
 }

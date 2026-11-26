@@ -190,6 +190,19 @@ test('consolidação informa cobertura e pendências', () => {
   assert.equal(c.okGrains, 1);
   assert.equal(c.pendingGrains, 1);
   close(c.coverage, 0.5);
-  close(c.irog, 342 / 450, 'pendente não entra no indicador');
+  assert.equal(c.irog, null, 'com pendência no escopo o IROG fica pendente, não parcial');
+  close(c.availability, (405 + 405) / (450 + 450), 'disponibilidade usa os dois dias (tempo válido)');
+  close(c.performance, 360 / 405, 'performance só do dia com padrão');
   assert.equal(c.pendingByCode.PADRAO_AUSENTE, 2); // o apontamento p1 e a perda l1
+});
+
+test('dia parado completo + dia produzido pendente: IROG pendente, nunca 0', () => {
+  const idle = base();
+  idle.production = [];
+  idle.losses = [];
+  const produced = base();
+  produced.standards = [];
+  const c = consolidateIrog([calculateIrogGrain(idle), calculateIrogGrain(produced)]);
+  assert.equal(c.irog, null);
+  assert.notEqual(c.availability, null);
 });

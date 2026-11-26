@@ -1,6 +1,6 @@
 # Metodologia do IROG FORTEFLEX
 
-Versão do cálculo: `irog-1.1.0` (código: `src/lib/irog/engine.ts`, testes: `src/lib/irog/engine.test.ts`).
+Versão do cálculo: `irog-1.2.0` (código: `src/lib/irog/engine.ts`, testes: `src/lib/irog/engine.test.ts`).
 
 ## Grão do cálculo
 
@@ -63,8 +63,25 @@ A consolidação **soma os tempos** dos grãos calculados e só então divide:
 Nunca se faz média simples dos percentuais. Um recurso que programou 60 min pesa 60 min, e não o mesmo
 que um que programou 450 min.
 
-Grãos pendentes ficam fora dos indicadores. A tela mostra a **cobertura** (fração do tempo programado
-que foi calculada) e os motivos das pendências.
+### Componente a componente (desde a versão 1.2.0)
+
+Cada pendência indica qual componente ela impede (tempo, performance ou qualidade). Na consolidação:
+
+| Indicador | Entra no cálculo o grão que tem… |
+| --- | --- |
+| Disponibilidade | calendário, paradas classificadas e horários válidos |
+| Performance | o acima **e** padrão produtivo para tudo o que produziu |
+| Qualidade | peso dos apontamentos e perdas coerentes (perda ≤ produção) |
+| **IROG** | **nenhuma pendência em todo o escopo** |
+
+Assim a disponibilidade e a qualidade já aparecem enquanto os padrões de ciclo são cadastrados, mas o
+**IROG fica pendente** até o escopo estar completo. Ele nunca é calculado só com a parte que sobrou:
+com os dias produzidos pendentes, sobrariam apenas os dias parados, e o resultado seria um IROG 0 falso.
+
+Todo dia **programado** no calendário entra no cálculo, mesmo sem apontamento: máquina programada e
+parada é perda de disponibilidade. Recurso sem grade (ex.: 301, "sob demanda") não tem disponibilidade.
+
+A tela mostra a **cobertura** (fração do tempo programado com IROG calculado) e os motivos das pendências.
 
 ## Pendências (o cálculo não substitui dado ausente por zero)
 

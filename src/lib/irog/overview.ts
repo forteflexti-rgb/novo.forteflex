@@ -206,7 +206,8 @@ export function buildIrogOverview(data: IrogSourceData, filters: Partial<Dashboa
     const c = consolidateIrog(gs.map((g) => g.result));
     const produced = gs.reduce((s, g) => s + g.producedKg, 0);
     const loss = gs.reduce((s, g) => s + g.lossKg, 0);
-    const status: CalculationStatus = c.okGrains === 0 || c.irog === null ? 'incomplete' : c.pendingGrains > 0 ? 'partial' : 'complete';
+    const status: CalculationStatus =
+      c.irog !== null ? 'complete' : c.availability !== null || c.performance !== null || c.quality !== null ? 'partial' : 'incomplete';
     const target = goalFor(base.level, base.level === 'factory' ? null : base.id);
     const irogPercent = pct(c.irog);
     const reasons = new Map<string, number>();

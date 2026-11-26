@@ -64,7 +64,8 @@ test('sem calendário o IROG fica pendente com o motivo', () => {
   data.calendars = [];
   const ov = buildIrogOverview(data, { startDate: '2026-10-05', endDate: '2026-10-06', includeDemo: true });
   assert.equal(ov.factory.irogPercent, null);
-  assert.equal(ov.factory.status, 'incomplete');
+  assert.equal(ov.factory.availabilityPercent, null);
+  assert.equal(ov.factory.status, 'partial'); // a qualidade por peso não depende do calendário
   assert.ok(ov.factory.memory.incompleteReasons.some((r) => r.includes('calendário')));
 });
 
