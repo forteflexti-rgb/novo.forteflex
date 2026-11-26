@@ -163,6 +163,27 @@ export async function getStandardCoverage() {
     .sort((a, b) => Number(a.hasStandard) - Number(b.hasStandard) || b.weightKg - a.weightKg);
 }
 
+/** Grava de uma vez os padrões lidos da planilha da engenharia (tudo ou nada). */
+export async function importStandards(
+  list: Array<{ machine_id: string; product_id: string | null; stage_id: string | null; standard_type: 'rate_per_hour' | 'cycle_seconds'; value: number; unit: string; valid_from: string; source: string; notes: string }>,
+) {
+  if (list.length === 0) throw new Error('Nenhum padrão preenchido na planilha.');
+  const rows = list.map((s) => ({
+    resource_id: s.machine_id,
+    product_id: s.product_id,
+    step_id: s.stage_id,
+    standard_type: s.standard_type,
+    value: positive(s.value, 'Valor oficial'),
+    unit: s.unit,
+    valid_from: s.valid_from,
+    source: s.source,
+    notes: s.notes ? `${s.notes} · importado da planilha da engenharia` : 'Importado da planilha da engenharia',
+  }));
+  const { error } = await db().from('resource_standards').insert(rows);
+  if (error) throw new Error(error.message);
+  return { imported: rows.length };
+}
+
 /** Encerra a vigência (não apaga): cálculos de períodos anteriores continuam rastreáveis. */
 export const endCycleStandard = (id: string, validTo: string) => updateRow('resource_standards', id, { valid_to: validTo });
 

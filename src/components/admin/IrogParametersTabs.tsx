@@ -4,9 +4,11 @@
  * Nenhum campo numérico vem preenchido: todo valor é informado por quem cadastra, com origem.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, Info, Trash2, Wand2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, FileUp, Info, Trash2, Wand2 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { api } from '../../lib/api';
 import type { CalendarExceptionRow, StandardRow, WeeklyCalendarRow } from '../../lib/irog/catalogApi';
+import { parseStandardsSheet, type SheetParseResult } from '../../lib/irog/standardsSheet';
 import type { CatalogData } from '../../types';
 
 const input = 'w-full min-h-[40px] px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white';
@@ -68,6 +70,21 @@ export function CycleStandardsTab({ catalog, onSaved }: { catalog: CatalogData; 
   const [validFrom, setValidFrom] = useState(today());
   const [source, setSource] = useState('');
   const [notes, setNotes] = useState('');
+  const [sheet, setSheet] = useState<(SheetParseResult & { file: string }) | null>(null);
+
+  const readSheet = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const wb = XLSX.read(await file.arrayBuffer());
+      const ws = wb.Sheets['Padrões'];
+      if (!ws) throw new Error('A planilha não tem a aba "Padrões". Use o arquivo IROG_Padroes_Producao_Engenharia.xlsx.');
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
+      setSheet({ ...parseStandardsSheet(rows), file: file.name });
+    } catch (e: any) {
+      setSheet(null);
+      await run(async () => Promise.reject(e), '');
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -140,6 +157,88 @@ export function CycleStandardsTab({ catalog, onSaved }: { catalog: CatalogData; 
         </span>
       </div>
       {banner}
+
+      <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-display font-bold text-[#0f2544]">Importar planilha da engenharia</h3>
+            <p className="text-xs text-slate-500">
+              Arquivo <span className="font-mono">IROG_Padroes_Producao_Engenharia.xlsx</span> preenchido. Linhas em branco continuam pendentes.
+            </p>
+          </div>
+          <label className="inline-flex items-center gap-2 px-3.5 min-h-[40px] rounded-lg border border-slate-300 text-sm text-slate-700 cursor-pointer hover:bg-slate-50">
+            <FileUp className="w-4 h-4" />
+            Selecionar planilha
+            <input
+              type="file"
+              accept=".xlsx"
+              className="hidden"
+              onChange={(e) => {
+                readSheet(e.target.files?.[0]);
+                e.target.value = '';
+              }}
+            />
+          </label>
+        </div>
+        {sheet && (
+          <div className="space-y-3">
+            <p className="text-xs text-slate-700">
+              <strong>{sheet.file}</strong>: {sheet.standards.length} padrão(ões) prontos para importar · {sheet.errors.length} linha(s) com erro ·{' '}
+              {sheet.blank} em branco
+            </p>
+            {sheet.errors.length > 0 && (
+              <div className="max-h-40 overflow-y-auto rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800 space-y-1">
+                {sheet.errors.map((e) => (
+                  <div key={e.line}>
+                    Linha {e.line} ({e.label}): {e.message}
+                  </div>
+                ))}
+              </div>
+            )}
+            {sheet.standards.length > 0 && (
+              <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 text-xs">
+                <table className="w-full text-left">
+                  <tbody className="divide-y divide-slate-100">
+                    {sheet.standards.map((s) => (
+                      <tr key={s.line}>
+                        <td className="px-3 py-1.5 text-slate-500 font-mono">{s.line}</td>
+                        <td className="px-3 py-1.5">{s.label}</td>
+                        <td className="px-3 py-1.5 text-right font-mono">
+                          {s.value.toLocaleString('pt-BR')} {s.standard_type === 'rate_per_hour' ? `${s.unit}/h` : `s/${s.unit}`}
+                        </td>
+                        <td className="px-3 py-1.5 font-mono">{s.valid_from}</td>
+                        <td className="px-3 py-1.5 text-slate-600">{s.source}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={sheet.standards.length === 0 || sheet.errors.length > 0}
+                onClick={() =>
+                  run(() => api.importStandards(sheet.standards), `${sheet.standards.length} padrão(ões) importados da planilha.`, () => {
+                    setSheet(null);
+                    load();
+                    onSaved();
+                  })
+                }
+                className="min-h-[40px] px-4 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white text-sm font-medium rounded-lg cursor-pointer disabled:cursor-not-allowed"
+              >
+                Importar {sheet.standards.length} padrão(ões)
+              </button>
+              <button type="button" onClick={() => setSheet(null)} className="min-h-[40px] px-4 border border-slate-300 text-sm rounded-lg cursor-pointer">
+                Cancelar
+              </button>
+            </div>
+            {sheet.errors.length > 0 && (
+              <p className="text-xs text-red-700">Corrija as linhas com erro na planilha e selecione de novo: a importação é feita só com o arquivo todo válido.</p>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <form onSubmit={save} className="bg-white border border-slate-200 rounded-xl p-5 space-y-3 h-fit">
