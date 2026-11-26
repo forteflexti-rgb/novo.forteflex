@@ -44,13 +44,45 @@ test('qualidade por peso: perdas em kg contra produção em metros', () => {
   close(r.irog, (240 * 0.95) / 480);
 });
 
-test('apontamento com duração impossível fica pendente', () => {
+test('apontamento com duração impossível: horário ignorado, quantidade mantida, aviso', () => {
   const input = timed();
   input.production[1].endMs = T0 + 122 * 24 * H;
   const r = calculateIrogGrain(input);
-  assert.equal(r.status, 'pending');
-  const p = r.pending.find((x) => x.code === 'APONTAMENTO_DURACAO_INVALIDA');
-  assert.deepEqual(p?.recordIds, ['p2']);
+  assert.equal(r.status, 'ok');
+  assert.equal(r.totals.observedRunMinutes, 180); // só o p1 (06h–09h); o p2 de 122 dias é ignorado
+  close(r.totals.idealMinutes, 240, 'as 600 mt dos dois apontamentos continuam contando');
+  assert.ok(r.warnings.some((w) => w.code === 'APONTAMENTO_DURACAO_IGNORADA'));
+});
+
+test('perda em dia sem produção: aviso, e entra na qualidade do período', () => {
+  const lossOnly = timed();
+  lossOnly.production = [];
+  lossOnly.losses = [{ id: 'l9', productId: null, stepId: null, quantity: 20, unit: 'kg' }];
+  const a = calculateIrogGrain(lossOnly);
+  assert.equal(a.status, 'ok');
+  assert.ok(a.warnings.some((w) => w.code === 'PERDA_SEM_PRODUCAO_NO_DIA'));
+  const b = calculateIrogGrain(timed()); // 200 kg produzidos, 10 kg perdidos
+  close(consolidateIrog([a, b]).quality, (200 - 30) / 200);
+});
+
+test('em empate, o padrão de vigência mais recente vence (oficial substitui provisório)', () => {
+  const input = timed();
+  input.standards = [
+    { productId: 'A', stepId: null, type: 'rate_per_hour', value: 150, unit: 'mt', validFrom: '2026-10-01' },
+    { productId: 'A', stepId: null, type: 'rate_per_hour', value: 300, unit: 'mt', validFrom: '2026-12-01' },
+  ];
+  close(calculateIrogGrain(input).totals.idealMinutes, 120); // 600 mt a 300 mt/h
+});
+
+test('oficial vence provisório mesmo com a mesma data de vigência', () => {
+  const input = timed();
+  input.standards = [
+    { productId: 'A', stepId: null, type: 'rate_per_hour', value: 300, unit: 'mt', validFrom: '2026-10-01' },
+    { productId: 'A', stepId: null, type: 'rate_per_hour', value: 150, unit: 'mt', validFrom: '2026-10-01', provisional: true },
+  ];
+  close(calculateIrogGrain(input).totals.idealMinutes, 120); // usa o oficial (300 mt/h)
+  input.standards.reverse();
+  close(calculateIrogGrain(input).totals.idealMinutes, 120); // independe da ordem
 });
 
 test('qualidade por peso exige peso no apontamento', () => {

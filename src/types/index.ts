@@ -543,6 +543,8 @@ export interface IrogFactoryOverview {
     detail: string;
   }>;
   demoRecordsCount: number;
+  /** Quantos padrões de ciclo em uso são PROVISÓRIOS (ritmo demonstrado), não oficiais da engenharia. */
+  provisionalStandards?: number;
 }
 
 export interface DowntimeEvent {

@@ -1,6 +1,6 @@
 # Metodologia do IROG FORTEFLEX
 
-Versão do cálculo: `irog-1.2.0` (código: `src/lib/irog/engine.ts`, testes: `src/lib/irog/engine.test.ts`).
+Versão do cálculo: `irog-1.3.0` (código: `src/lib/irog/engine.ts`, testes: `src/lib/irog/engine.test.ts`).
 
 ## Grão do cálculo
 
@@ -116,3 +116,18 @@ Cada pendência informa o motivo, o cadastro necessário e quantos registros for
 - Cada registro carrega sua origem (`demo`, `manual`, `iniflex_report`, `iniflex_api`). Dados
   demonstrativos nunca entram no IROG real.
 - Perdas ficam em registros próprios e nunca são somadas de novo à produção.
+
+## Decisões de 26/11/2026 (aprovadas pelo administrador) — versão 1.3.0
+
+| Situação | Regra adotada |
+| --- | --- |
+| Sem padrão oficial da engenharia | **Padrão PROVISÓRIO** = melhor ritmo sustentado demonstrado em Out/2026: P90 da velocidade por apontamento (máquina × produto × etapa × unidade), com **tempo efetivo** — trechos em que vários apontamentos rodaram juntos no mesmo recurso são divididos entre eles. Origem gravada como "PROVISÓRIO …"; o painel avisa "padrão provisório". Fallbacks: maior velocidade (apontamentos < 30 min) e P90 da etapa. Script: `scripts/irog_padroes_provisorios.ts`. |
+| Padrão oficial cadastrado | Vence o provisório em empate de especificidade, **mesmo com a mesma data** de vigência. Nada precisa ser apagado. |
+| Recurso sob demanda (301) | `resources.schedule_mode = 'on_demand'`: programado só no tempo em que foi acionado (união dos apontamentos do dia). Disponibilidade = 100% por definição; desempenho e qualidade normais. |
+| Parada sem motivo no ERP | Motivo "Parada sem motivo informado (Iniflex)", **não programada** (critério conservador: conta contra a disponibilidade). |
+| Apontamento com duração impossível (> 24 h) | Aviso, não pendência: o **horário é ignorado** no tempo de operação e a **quantidade continua contando** (ex.: OP 11412, 501, 27/10). Corrigir no ERP. |
+| Perda em dia sem produção | Aviso, não pendência: a perda entra na **qualidade do período**; o dia fica sem qualidade própria. |
+| Impressão apontada só por peso | No RPCP622 a "Quantidade" vem 0 nos apontamentos em KG da 201; nas demais máquinas em KG, quantidade = peso em 100% dos casos. Em KG com quantidade 0, **quantidade = peso líquido** (dados e importador). |
+
+Resultado de Out/2026 com essas regras: Disponibilidade 73,5% · Desempenho 94,5% (provisório) ·
+Qualidade 98,3% · **IROG 68,3%**.

@@ -56,6 +56,9 @@ const DEFAULT_FILTERS: DashboardFilters = {
   includeDemo: true,
 };
 
+/** Eixo de percentual: 0–100%, ou até o próximo múltiplo de 25 quando algum valor passar de 100%. */
+const PCT_DOMAIN: [number, (max: number) => number] = [0, (max: number) => Math.max(100, Math.ceil(max / 25) * 25)];
+
 function fmtNum(n: number): string {
   return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(n);
 }
@@ -507,7 +510,11 @@ export function IrogFactoryDashboard({ catalog, onOpenTvMode, onDrilldown }: Iro
                 <div className="mt-2 text-2xl font-display font-bold font-mono tabular-nums text-[#0f2544]">
                   {factory.performancePercent.toFixed(1)}%
                 </div>
-                <div className="mt-1 text-xs text-slate-500">Ritmo real vs ciclo padrão</div>
+                <div className="mt-1 text-xs text-slate-500">
+                  {overview?.provisionalStandards
+                    ? 'Base: melhor ritmo de Out/26 (padrão provisório)'
+                    : 'Ritmo real vs ciclo padrão'}
+                </div>
               </>
             ) : (
               <>
@@ -801,7 +808,7 @@ export function IrogFactoryDashboard({ catalog, onOpenTvMode, onDrilldown }: Iro
             <LineChart data={charts.dailyIrog}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="date" tickFormatter={fmtDay} tick={{ fontSize: 11, fill: '#64748b' }} minTickGap={16} />
-              <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" width={44} />
+              <YAxis domain={PCT_DOMAIN} tickCount={6} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" width={44} />
               <Tooltip formatter={pctTip} labelFormatter={fmtDay} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               {dailyHas.irog && <Line type="monotone" dataKey="irog" name="IROG" stroke="#0f2544" strokeWidth={2.5} dot={false} connectNulls isAnimationActive={false} />}
@@ -836,7 +843,7 @@ export function IrogFactoryDashboard({ catalog, onOpenTvMode, onDrilldown }: Iro
             <BarChart data={periodData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="period" tickFormatter={fmtPeriod} tick={{ fontSize: 11, fill: '#64748b' }} />
-              <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" width={44} />
+              <YAxis domain={PCT_DOMAIN} tickCount={6} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" width={44} />
               <Tooltip formatter={pctTip} labelFormatter={fmtPeriod} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               {pctBars(periodHas, { irog: 'irog', availability: 'availability', performance: 'performance', quality: 'quality' })}
@@ -848,7 +855,7 @@ export function IrogFactoryDashboard({ catalog, onOpenTvMode, onDrilldown }: Iro
             <BarChart data={overview.sectors}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} interval={0} />
-              <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" width={44} />
+              <YAxis domain={PCT_DOMAIN} tickCount={6} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" width={44} />
               <Tooltip formatter={pctTip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               {pctBars(entityHas(overview.sectors), ENTITY_KEYS)}
@@ -860,7 +867,7 @@ export function IrogFactoryDashboard({ catalog, onOpenTvMode, onDrilldown }: Iro
             <BarChart data={overview.lines.map((l) => ({ ...l, label: l.code ?? l.name }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} interval={0} />
-              <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" width={44} />
+              <YAxis domain={PCT_DOMAIN} tickCount={6} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" width={44} />
               <Tooltip formatter={pctTip} labelFormatter={(_l: any, p: any) => (p?.[0]?.payload?.name as string) ?? String(_l)} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               {pctBars(entityHas(overview.lines), ENTITY_KEYS)}
@@ -875,7 +882,7 @@ export function IrogFactoryDashboard({ catalog, onOpenTvMode, onDrilldown }: Iro
           >
             <BarChart data={ranking} layout="vertical" margin={{ left: 8, right: 24 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" />
+              <XAxis type="number" domain={PCT_DOMAIN} tickCount={6} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" />
               <YAxis dataKey="label" type="category" width={150} tick={{ fontSize: 11, fill: '#334155' }} />
               <Tooltip formatter={pctTip} />
               <Bar dataKey={rankingMetric.key} name={rankingMetric.label} fill="#2563eb" radius={[0, 4, 4, 0]} isAnimationActive={false} label={{ position: 'right', fontSize: 11, fill: '#0f2544', formatter: (v: any) => (v == null ? '' : `${Number(v).toFixed(1)}%`) }} />
@@ -910,7 +917,7 @@ export function IrogFactoryDashboard({ catalog, onOpenTvMode, onDrilldown }: Iro
               <BarChart data={charts.byShift}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} interval={0} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" width={44} />
+                <YAxis domain={PCT_DOMAIN} tickCount={6} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" width={44} />
                 <Tooltip formatter={pctTip} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 {pctBars(periodLikeHas(charts.byShift), { irog: 'irog', availability: 'availability', performance: 'performance', quality: 'quality' })}

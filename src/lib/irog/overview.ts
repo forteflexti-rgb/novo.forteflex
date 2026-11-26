@@ -7,8 +7,10 @@
  */
 import {
   IROG_CALC_VERSION,
+  MAX_EVENT_MINUTES,
   calculateIrogGrain,
   consolidateIrog,
+  unionMinutes,
   type IrogResult,
   type ResourceStandard,
 } from './engine';
@@ -25,7 +27,7 @@ export interface IrogSourceData {
   lines: Array<{ id: string; code: string; name: string; sector_id: string }>;
   shifts: Array<{ id: string; name: string }>;
   products: Array<{ id: string; name: string }>;
-  resources: Array<{ id: string; code: string; name: string; sector_id: string; line_id: string | null; active: boolean }>;
+  resources: Array<{ id: string; code: string; name: string; sector_id: string; line_id: string | null; active: boolean; schedule_mode?: string | null }>;
   events: Array<{
     id: string; resource_id: string; step_id: string | null; product_id: string | null; shift_id: string | null;
     operator_id: string | null; order_id: string | null; production_date: string; started_at: string | null;
@@ -35,7 +37,7 @@ export interface IrogSourceData {
   downtime: Array<{ id: string; resource_id: string | null; production_date: string | null; duration_minutes: number; reason: string; reason_id: string | null; status: string; started_at: string | null; created_at: string; source: string | null }>;
   calendars: Array<{ resource_id: string; weekday: number; shift_id: string; planned_minutes: number; valid_from: string; valid_to: string | null }>;
   exceptions: Array<{ resource_id: string | null; exception_date: string; shift_id: string | null; kind: string; minutes: number | null }>;
-  standards: Array<{ resource_id: string; product_id: string | null; step_id: string | null; standard_type: 'rate_per_hour' | 'cycle_seconds'; value: number; unit: string; valid_from: string; valid_to: string | null }>;
+  standards: Array<{ resource_id: string; product_id: string | null; step_id: string | null; standard_type: 'rate_per_hour' | 'cycle_seconds'; value: number; unit: string; valid_from: string; valid_to: string | null; source?: string | null }>;
   downtimeReasons: Array<{ id: string; name: string; category: string | null; is_planned: boolean }>;
   lossReasons: Array<{ id: string; name: string; category: string | null }>;
   goals: Array<{ metric: string; target_percent: number | null; sector_id: string | null; line_id: string | null; resource_id: string | null; active: boolean }>;
@@ -83,6 +85,7 @@ export function buildIrogOverview(data: IrogSourceData, filters: Partial<Dashboa
       (!filters.machineId || r.id === filters.machineId),
   );
   const resourceIds = new Set(resources.map((r) => r.id));
+  const onDemandIds = new Set(resources.filter((r) => r.schedule_mode === 'on_demand').map((r) => r.id));
   const keep = (src: string | null | undefined) => filters.includeDemo !== false || src !== 'demo';
 
   const events = data.events.filter(
@@ -140,7 +143,18 @@ export function buildIrogOverview(data: IrogSourceData, filters: Partial<Dashboa
     const cal = data.calendars.filter((c) => c.resource_id === resourceId && c.weekday === weekday(date) && inRange(date, c.valid_from, c.valid_to));
     const hasCalendar = data.calendars.some((c) => c.resource_id === resourceId);
     let calendarMinutes: number | null = hasCalendar ? cal.reduce((s, c) => s + c.planned_minutes, 0) : null;
-    if (calendarMinutes !== null) {
+
+    // Recurso SOB DEMANDA sem grade: programado exatamente no tempo em que foi acionado (união dos
+    // horários apontados no dia). Dias sem acionamento não são programados.
+    const onDemand = !hasCalendar && onDemandIds.has(resourceId);
+    if (onDemand) {
+      const intervals: Array<[number, number]> = events
+        .filter((e) => e.resource_id === resourceId && e.production_date === date && e.started_at && e.ended_at)
+        .map((e) => [Date.parse(e.started_at as string), Date.parse(e.ended_at as string)] as [number, number])
+        .filter(([a, b]) => b >= a && (b - a) / 60000 <= MAX_EVENT_MINUTES);
+      calendarMinutes = Math.round(unionMinutes(intervals, ws, ws + DAY_MS) * 100) / 100;
+    }
+    if (calendarMinutes !== null && !onDemand) {
       for (const x of data.exceptions.filter((x) => x.exception_date === date && (x.resource_id === null || x.resource_id === resourceId))) {
         const mins = x.minutes ?? null;
         if (x.kind === 'holiday' || x.kind === 'planned_stop') {
@@ -157,7 +171,7 @@ export function buildIrogOverview(data: IrogSourceData, filters: Partial<Dashboa
     const gDown = downtime.filter((d) => d.resource_id === resourceId && d.production_date === date);
     const standards: ResourceStandard[] = data.standards
       .filter((s) => s.resource_id === resourceId && inRange(date, s.valid_from, s.valid_to))
-      .map((s) => ({ productId: s.product_id, stepId: s.step_id, type: s.standard_type, value: Number(s.value), unit: s.unit }));
+      .map((s) => ({ productId: s.product_id, stepId: s.step_id, type: s.standard_type, value: Number(s.value), unit: s.unit, validFrom: s.valid_from, provisional: /^PROVIS/i.test(s.source ?? '') }));
 
     const result = calculateIrogGrain({
       resourceId,
@@ -383,5 +397,6 @@ export function buildIrogOverview(data: IrogSourceData, filters: Partial<Dashboa
     },
     timelineEvents: timeline,
     demoRecordsCount: data.events.filter((e) => e.source === 'demo').length,
+    provisionalStandards: data.standards.filter((s) => resourceIds.has(s.resource_id) && /^PROVIS/i.test(s.source ?? '')).length,
   };
 }

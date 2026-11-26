@@ -17,7 +17,7 @@
  * sem misturar grandezas. Dado ausente NUNCA vira zero: o grão fica "pending" com o motivo.
  */
 
-export const IROG_CALC_VERSION = 'irog-1.2.0';
+export const IROG_CALC_VERSION = 'irog-1.3.0';
 
 export type StandardType = 'rate_per_hour' | 'cycle_seconds';
 
@@ -27,6 +27,10 @@ export interface ResourceStandard {
   type: StandardType;
   value: number; // > 0
   unit: string; // unidade da quantidade a que o padrão se refere
+  /** Início da vigência (AAAA-MM-DD): em empate de especificidade vence o mais recente. */
+  validFrom?: string;
+  /** Padrão provisório (ritmo demonstrado): em empate, o oficial da engenharia sempre vence. */
+  provisional?: boolean;
 }
 
 export interface ProductionFact {
@@ -147,7 +151,13 @@ const COMPONENT_OF: Record<PendingCode, PendingComponent> = {
   VALOR_INVALIDO: 'all',
 };
 
-export type WarningCode = 'PERFORMANCE_ACIMA_100' | 'SEM_PRODUCAO' | 'PRODUCAO_FORA_DO_CALENDARIO' | 'PARADA_NAO_APONTADA';
+export type WarningCode =
+  | 'PERFORMANCE_ACIMA_100'
+  | 'SEM_PRODUCAO'
+  | 'PRODUCAO_FORA_DO_CALENDARIO'
+  | 'PARADA_NAO_APONTADA'
+  | 'APONTAMENTO_DURACAO_IGNORADA'
+  | 'PERDA_SEM_PRODUCAO_NO_DIA';
 
 export interface IrogWarning {
   code: WarningCode;
@@ -209,7 +219,11 @@ export function findStandard(
   let bestScore = -1;
   for (const s of standards) {
     const sc = score(s);
-    if (sc > bestScore) {
+    // Empate de especificidade: oficial vence provisório; entre iguais, vence a vigência mais recente.
+    const better =
+      sc === bestScore && sc >= 0 && best !== null &&
+      (!!best.provisional !== !!s.provisional ? !s.provisional : (s.validFrom ?? '') > (best.validFrom ?? ''));
+    if (sc > bestScore || better) {
       best = s;
       bestScore = sc;
     }
@@ -325,11 +339,11 @@ export function calculateIrogGrain(input: IrogGrainInput): IrogResult {
       else intervals.push([p.startMs, p.endMs]);
     }
     if (badDuration.length > 0) {
-      addPending(pending, {
-        code: 'APONTAMENTO_DURACAO_INVALIDA',
-        message: `Apontamento com duração negativa ou acima de ${MAX_EVENT_MINUTES / 60} h.`,
-        required: 'Corrigir início/fim do apontamento no ERP',
-        recordIds: badDuration,
+      // A duração é claramente um erro de fechamento no ERP: o intervalo é ignorado no tempo de
+      // operação, mas a quantidade produzida continua contando. Aviso, não pendência.
+      warnings.push({
+        code: 'APONTAMENTO_DURACAO_IGNORADA',
+        message: `${badDuration.length} apontamento(s) com duração negativa ou acima de ${MAX_EVENT_MINUTES / 60} h: horário ignorado, quantidade mantida. Corrigir no ERP.`,
       });
     }
     if (withTimes > 0 || input.production.length === 0) {
@@ -423,7 +437,14 @@ export function calculateIrogGrain(input: IrogGrainInput): IrogResult {
     }
     producedWeightKg = input.production.reduce((s, p) => s + (isValidNumber(p.weightKg) ? p.weightKg : 0), 0);
     lossWeightKg = input.losses.filter((l) => norm(l.unit) === 'kg' && isValidNumber(l.quantity)).reduce((s, l) => s + l.quantity, 0);
-    if (lossWeightKg > producedWeightKg + 1e-9) {
+    if (producedWeightKg === 0 && lossWeightKg > 0) {
+      // Perda apontada num dia sem produção no recurso (RPCP019 é diário): entra na qualidade do
+      // período consolidado, sem qualidade no dia. Aviso, não pendência.
+      warnings.push({
+        code: 'PERDA_SEM_PRODUCAO_NO_DIA',
+        message: `Perda de ${lossWeightKg} kg em dia sem produção apontada: contada na qualidade do período.`,
+      });
+    } else if (lossWeightKg > producedWeightKg + 1e-9) {
       addPending(pending, {
         code: 'PERDA_MAIOR_QUE_PRODUCAO',
         message: `Perda (${lossWeightKg} kg) maior que a produção (${producedWeightKg} kg).`,

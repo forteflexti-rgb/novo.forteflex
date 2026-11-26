@@ -29,6 +29,9 @@ interface TvProjectionViewProps {
   onExit: () => void;
 }
 
+/** Eixo de percentual: 0–100%, ou até o próximo múltiplo de 25 quando algum valor passar de 100%. */
+const PCT_DOMAIN: [number, (max: number) => number] = [0, (max: number) => Math.max(100, Math.ceil(max / 25) * 25)];
+
 function fmtNum(n: number): string {
   return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(n);
 }
@@ -362,7 +365,7 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
                 <TvValue v={f.performancePercent} />
               </div>
               <div className="mt-1.5 text-xs font-mono text-slate-400">
-                Produzido: {fmtNum(f.producedQuantity)} kg
+                {overview?.provisionalStandards ? 'Padrão provisório (ritmo de Out/26)' : `Produzido: ${fmtNum(f.producedQuantity)} kg`}
               </div>
             </div>
 
@@ -409,7 +412,7 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
                   <LineChart data={overview.charts.dailyIrog}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1e3a5f" />
                     <XAxis dataKey="date" tickFormatter={fmtDay} minTickGap={18} tick={{ fontSize: 12, fill: '#cbd5e1' }} />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 12, fill: '#cbd5e1' }} unit="%" />
+                    <YAxis domain={PCT_DOMAIN} tickCount={6} tick={{ fontSize: 12, fill: '#cbd5e1' }} unit="%" />
                     <Tooltip
                       contentStyle={{ backgroundColor: '#09172b', borderColor: '#334155', color: '#f8fafc' }}
                     />
@@ -425,7 +428,7 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
             <div className="lg:col-span-6 bg-[#0f2544] border border-slate-700/80 rounded-xl p-6 flex flex-col gap-5">
               <div>
                 <h2 className="text-lg font-display font-bold text-white">{dailyHasIrog ? 'IROG por Setor & Linha' : 'Disponibilidade por Setor & Linha'}</h2>
-                <p className="text-xs text-slate-400">{dailyHasIrog ? 'Frente às metas cadastradas' : 'IROG em implantação: aguardando os padrões de ciclo'}</p>
+                <p className="text-xs text-slate-400">{dailyHasIrog ? 'Consolidado ponderado por tempo · metas ainda não cadastradas' : 'IROG em implantação: aguardando os padrões de ciclo'}</p>
               </div>
               <div className="space-y-4">
                 {overview.sectors.map((sec) => {

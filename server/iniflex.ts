@@ -199,6 +199,12 @@ function parseRpcp622(rows: Row[], filename: string): Rpcp622Report {
       const date = reportDay || startDate;
       const res = splitCodeName(resource);
       const it = splitCodeName(item);
+      const unit = str(row[cols.unit]).toUpperCase() || 'KG';
+      const weight = num(row[cols.weight]);
+      const rawQty = num(row[cols.qty]);
+      // A impressão é apontada só por peso: em KG a "Quantidade" vem 0 e o peso é a quantidade.
+      // (Nas demais máquinas em KG, quantidade = peso em 100% dos apontamentos de Out/2026.)
+      const quantity = unit === 'KG' && rawQty === 0 && weight > 0 ? weight : rawQty;
       entries.push({
         date,
         startHour: hour,
@@ -210,9 +216,9 @@ function parseRpcp622(rows: Row[], filename: string): Rpcp622Report {
         resourceName: resource,
         itemCode: it.code,
         itemName: it.name.replace(/\s+/g, ' '),
-        quantity: num(row[cols.qty]),
-        unit: str(row[cols.unit]).toUpperCase() || 'KG',
-        weight: num(row[cols.weight]),
+        quantity,
+        unit,
+        weight,
       });
     }
   }
