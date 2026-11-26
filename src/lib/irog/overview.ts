@@ -214,7 +214,11 @@ export function buildIrogOverview(data: IrogSourceData, filters: Partial<Dashboa
     for (const g of gs)
       for (const p of g.result.pending) {
         // agrupa por tipo de cadastro faltante (sem detalhar produto/etapa na lista)
-        const key = `${p.message} Necessário: ${p.required.replace(/ para produto .*$/, '').replace(/ na unidade .*$/, ' na unidade do apontamento')}.`;
+        const required = p.required
+          .replace(/ para produto .*$/, '')
+          .replace(/ na unidade .*$/, ' na unidade do apontamento')
+          .replace(/ \([a-z_]+(\.[a-z_]+)?\)/g, ''); // sem nomes técnicos de tabelas na tela
+        const key = `${p.message} Necessário: ${required}.`;
         reasons.set(key, (reasons.get(key) ?? 0) + Math.max(1, p.affectedRecords));
       }
     for (const g of gs)

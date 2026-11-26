@@ -10,7 +10,7 @@ interface IrogDrilldownViewProps {
 }
 
 function fmtPct(v: number | null): string {
-  return v === null ? 'Incompleto' : `${v.toFixed(1)}%`;
+  return v === null ? 'Pendente' : `${v.toFixed(1)}%`;
 }
 
 function fmtNum(v: number): string {
@@ -137,19 +137,21 @@ export function IrogDrilldownView({ catalog, initialTarget }: IrogDrilldownViewP
           >
             {entities.map((e) => (
               <option key={e.id} value={e.id}>
-                {e.code ? `${e.code} — ${e.name}` : e.name}
+                {e.code && !e.name.startsWith(e.code) ? `${e.code} — ${e.name}` : e.name}
               </option>
             ))}
           </select>
 
-          <label className="inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={includeDemo}
-              onChange={(e) => setIncludeDemo(e.target.checked)}
-            />
-            <span>Incluir demo</span>
-          </label>
+          {overview && overview.demoRecordsCount > 0 && (
+            <label className="inline-flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={includeDemo}
+                onChange={(e) => setIncludeDemo(e.target.checked)}
+              />
+              <span>Incluir demo</span>
+            </label>
+          )}
 
           {currentEntity && (
             <button
@@ -176,12 +178,21 @@ export function IrogDrilldownView({ catalog, initialTarget }: IrogDrilldownViewP
               </div>
               <div className="text-lg font-display font-bold mt-0.5 truncate">{currentEntity.name}</div>
               <div className="mt-3 flex items-baseline gap-3">
-                <span className="text-3xl font-display font-bold font-mono tabular-nums">
-                  {fmtPct(currentEntity.irogPercent)}
-                </span>
-                <span className="text-xs text-slate-300 font-mono">
-                  Meta: {currentEntity.targetIrogPercent !== null ? `${currentEntity.targetIrogPercent}%` : '—'}
-                </span>
+                {currentEntity.irogPercent !== null ? (
+                  <>
+                    <span className="text-3xl font-display font-bold font-mono tabular-nums">
+                      {currentEntity.irogPercent.toFixed(1)}%
+                    </span>
+                    <span className="text-xs text-slate-300 font-mono">
+                      Meta: {currentEntity.targetIrogPercent !== null ? `${currentEntity.targetIrogPercent}%` : 'não definida'}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-lg font-display font-semibold">
+                    IROG em implantação
+                    <span className="block text-xs font-normal text-blue-100 mt-0.5">Veja abaixo o que falta cadastrar</span>
+                  </span>
+                )}
               </div>
             </div>
 
@@ -211,17 +222,21 @@ export function IrogDrilldownView({ catalog, initialTarget }: IrogDrilldownViewP
                 {fmtPct(currentEntity.qualityPercent)}
               </div>
               <div className="text-xs text-slate-500 mt-1 font-mono">
-                Perdas: {fmtNum(currentEntity.lossQuantity)}
+                Perdas: {fmtNum(currentEntity.lossQuantity)} kg
               </div>
             </div>
 
             <div className="bg-white border border-slate-200 rounded-xl p-4">
-              <div className="text-xs text-slate-500">Realizado / Meta</div>
+              <div className="text-xs text-slate-500">{currentEntity.plannedQuantity > 0 ? 'Realizado / Planejado' : 'Produção realizada'}</div>
               <div className="mt-2 text-2xl font-display font-bold font-mono tabular-nums text-blue-700">
-                {currentEntity.goalAttainmentPercent.toFixed(1)}%
+                {currentEntity.plannedQuantity > 0
+                  ? `${currentEntity.goalAttainmentPercent.toFixed(1)}%`
+                  : <>{fmtNum(currentEntity.producedQuantity)} <span className="text-sm font-normal text-slate-500">kg</span></>}
               </div>
               <div className="text-xs text-slate-500 mt-1 font-mono">
-                {fmtNum(currentEntity.producedQuantity)} / {fmtNum(currentEntity.plannedQuantity)}
+                {currentEntity.plannedQuantity > 0
+                  ? `${fmtNum(currentEntity.producedQuantity)} / ${fmtNum(currentEntity.plannedQuantity)} kg`
+                  : `${currentEntity.recordsCount} apontamentos`}
               </div>
             </div>
           </section>
@@ -258,7 +273,7 @@ export function IrogDrilldownView({ catalog, initialTarget }: IrogDrilldownViewP
                   {childLines.map((l) => (
                     <tr key={l.id} className="hover:bg-slate-50">
                       <td className="px-4 py-2.5 font-medium text-slate-900">
-                        {l.code} — {l.name}
+                        {l.code && !l.name.startsWith(l.code) ? `${l.code} — ${l.name}` : l.name}
                       </td>
                       <td className="px-4 py-2.5 text-right font-mono tabular-nums">{fmtPct(l.availabilityPercent)}</td>
                       <td className="px-4 py-2.5 text-right font-mono tabular-nums">{fmtPct(l.performancePercent)}</td>
@@ -309,7 +324,7 @@ export function IrogDrilldownView({ catalog, initialTarget }: IrogDrilldownViewP
                   {childMachines.map((m) => (
                     <tr key={m.id} className="hover:bg-slate-50">
                       <td className="px-4 py-2.5 font-medium text-slate-900">
-                        {m.code} — {m.name}
+                        {m.code && !m.name.startsWith(m.code) ? `${m.code} — ${m.name}` : m.name}
                       </td>
                       <td className="px-4 py-2.5">
                         <span

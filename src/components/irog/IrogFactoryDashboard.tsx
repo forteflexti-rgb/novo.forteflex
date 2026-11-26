@@ -61,7 +61,7 @@ function fmtNum(n: number): string {
 }
 
 function fmtPct(v: number | null): string {
-  return v === null ? 'Incompleto' : `${v.toFixed(1)}%`;
+  return v === null ? 'Pendente' : `${v.toFixed(1)}%`;
 }
 
 function fmtMinutes(totalMin: number): string {
@@ -69,6 +69,111 @@ function fmtMinutes(totalMin: number): string {
   const m = Math.round(totalMin % 60);
   if (h === 0) return `${m} min`;
   return `${h}h ${String(m).padStart(2, '0')}m`;
+}
+
+/** Percentual em tabela: "pendente" discreto em vez de texto grande de erro. */
+function Pct({ v }: { v: number | null }) {
+  if (v === null) {
+    return <span className="text-[10px] font-sans font-medium uppercase tracking-wide text-slate-400">pendente</span>;
+  }
+  return <>{v.toFixed(1)}%</>;
+}
+
+const fmtDay = (v: unknown) => {
+  const d = String(v ?? '');
+  return d.length >= 10 ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : d;
+};
+const fmtPeriod = (v: unknown) => {
+  const p = String(v ?? '');
+  const w = p.match(/^(\d{4})-S(\d{2})$/);
+  if (w) return `Sem ${Number(w[2])}`;
+  const m = p.match(/^(\d{4})-(\d{2})$/);
+  return m ? `${['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'][Number(m[2]) - 1]}/${m[1].slice(2)}` : p;
+};
+const pctTip = (v: any) => (v === null || v === undefined ? 'pendente' : `${Number(v).toFixed(1)}%`);
+
+/** "501 - CORTE E SOLDA…" já começa pelo código: não repetir "501 — 501 - …". */
+const shortName = (e: { code?: string; name: string }) =>
+  e.code && !e.name.startsWith(e.code) ? `${e.code} — ${e.name}` : e.name;
+
+type PctFlags = { irog: boolean; availability: boolean; performance: boolean; quality: boolean };
+const ENTITY_KEYS = { irog: 'irogPercent', availability: 'availabilityPercent', performance: 'performancePercent', quality: 'qualityPercent' } as const;
+const anyValue = (rows: any[], key: string) => rows.some((r) => r[key] !== null && r[key] !== undefined);
+const entityHas = (rows: any[]): PctFlags => ({
+  irog: anyValue(rows, 'irogPercent'),
+  availability: anyValue(rows, 'availabilityPercent'),
+  performance: anyValue(rows, 'performancePercent'),
+  quality: anyValue(rows, 'qualityPercent'),
+});
+const periodLikeHas = (rows: any[]): PctFlags => ({
+  irog: anyValue(rows, 'irog'),
+  availability: anyValue(rows, 'availability'),
+  performance: anyValue(rows, 'performance'),
+  quality: anyValue(rows, 'quality'),
+});
+
+/** Barras só dos indicadores calculados, na ordem D, P, Q, IROG. */
+function pctBars(has: PctFlags, keys: { irog: string; availability: string; performance: string; quality: string }) {
+  const spec = [
+    { on: has.availability, key: keys.availability, name: 'Disponibilidade', fill: '#2563eb' },
+    { on: has.performance, key: keys.performance, name: 'Desempenho', fill: '#f59e0b' },
+    { on: has.quality, key: keys.quality, name: 'Qualidade', fill: '#16a34a' },
+    { on: has.irog, key: keys.irog, name: 'IROG', fill: '#0f2544' },
+  ];
+  return spec
+    .filter((s) => s.on)
+    .map((s) => <Bar key={s.key} dataKey={s.key} name={s.name} fill={s.fill} radius={[4, 4, 0, 0]} isAnimationActive={false} />);
+}
+
+const seriesSubtitle = (has: PctFlags) => {
+  const on = [has.availability && 'Disponibilidade', has.performance && 'Desempenho', has.quality && 'Qualidade', has.irog && 'IROG'].filter(Boolean);
+  const off = [!has.performance && 'Desempenho', !has.irog && 'IROG'].filter(Boolean);
+  return `${on.join(', ')} dia a dia${off.length ? ` · ${off.join(' e ')} em implantação` : ''}`;
+};
+
+function ChartCard({
+  title,
+  subtitle,
+  empty,
+  actions,
+  wide,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  empty?: string | null;
+  actions?: React.ReactNode;
+  wide?: boolean;
+  children: React.ReactElement;
+}) {
+  return (
+    <div className={`${wide ? 'lg:col-span-2 ' : ''}bg-white border border-slate-200 rounded-xl p-5`}>
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-display font-bold text-[#0f2544]">{title}</h3>
+          {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}
+        </div>
+        {actions}
+      </div>
+      <div className="h-64">
+        {empty ? (
+          <div className="h-full flex items-center justify-center rounded-lg bg-slate-50 text-xs text-slate-500">{empty}</div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            {children}
+          </ResponsiveContainer>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Frase curta do que falta para o IROG sair (vem da memória de cálculo). */
+function pendingHint(reasons: string[]): string {
+  if (reasons.some((r) => r.includes('Padrão produtivo'))) return 'Aguardando os padrões de ciclo da engenharia';
+  if (reasons.some((r) => r.includes('calendário'))) return 'Aguardando o calendário das máquinas';
+  if (reasons.some((r) => r.includes('Classificação de paradas'))) return 'Aguardando a classificação das paradas';
+  return reasons.length ? 'Dados incompletos — ver memória de cálculo' : 'Sem dados no período';
 }
 
 export function IrogFactoryDashboard({ catalog, onOpenTvMode, onDrilldown }: IrogFactoryDashboardProps) {
@@ -122,6 +227,23 @@ export function IrogFactoryDashboard({ catalog, onOpenTvMode, onDrilldown }: Iro
   const mc = overview?.machineCounts;
   const charts = overview?.charts;
 
+  // ---- Dados derivados para os gráficos (só o que já está calculado) ----
+  const dailyHas = periodLikeHas(charts?.dailyIrog ?? []);
+  const periodData = (periodChartMode === 'weekly' ? charts?.weeklyIrog : charts?.monthlyIrog) ?? [];
+  const periodHas = periodLikeHas(periodData);
+  const dailyHasPlanned = (charts?.dailyIrog ?? []).some((d) => d.planned > 0);
+  const shiftHasPct = anyValue(charts?.byShift ?? [], 'availability') || anyValue(charts?.byShift ?? [], 'quality');
+  const shiftTotal = (charts?.byShift ?? []).reduce((s, x) => s + x.realized, 0);
+  const noShiftShare = shiftTotal > 0 ? Math.round((((charts?.byShift ?? []).find((x) => x.name === 'Turno não informado')?.realized ?? 0) / shiftTotal) * 100) : 0;
+  const rankingMetric = anyValue(overview?.machines ?? [], 'irogPercent')
+    ? ({ key: 'irogPercent', label: 'IROG' } as const)
+    : ({ key: 'availabilityPercent', label: 'Disponibilidade' } as const);
+  const ranking = (overview?.machines ?? [])
+    .filter((m) => m[rankingMetric.key] !== null)
+    .sort((a, b) => (b[rankingMetric.key] ?? 0) - (a[rankingMetric.key] ?? 0))
+    .map((m) => ({ ...m, label: shortName(m) }));
+  const idleMinutes = factory ? Math.max(0, factory.plannedTimeMinutes - factory.operatingTimeMinutes - factory.downtimeMinutes) : 0;
+
   const lossPercent =
     factory && factory.producedQuantity > 0
       ? (factory.lossQuantity / factory.producedQuantity) * 100
@@ -162,15 +284,17 @@ export function IrogFactoryDashboard({ catalog, onOpenTvMode, onDrilldown }: Iro
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
-            <label className="inline-flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={filters.includeDemo}
-                onChange={(e) => updateFilter('includeDemo', e.target.checked)}
-                className="rounded border-slate-300 text-blue-600"
-              />
-              <span>Incluir demo</span>
-            </label>
+            {overview && overview.demoRecordsCount > 0 && (
+              <label className="inline-flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filters.includeDemo}
+                  onChange={(e) => updateFilter('includeDemo', e.target.checked)}
+                  className="rounded border-slate-300 text-blue-600"
+                />
+                <span>Incluir demo</span>
+              </label>
+            )}
             <button
               type="button"
               onClick={() => setFilters(DEFAULT_FILTERS)}
@@ -336,12 +460,26 @@ export function IrogFactoryDashboard({ catalog, onOpenTvMode, onDrilldown }: Iro
               <span>IROG Geral da Fábrica</span>
               <Activity className="w-4 h-4 text-blue-300" />
             </div>
-            <div className="mt-2 text-3xl font-display font-bold font-mono tabular-nums">
-              {fmtPct(factory.irogPercent)}
-            </div>
-            <div className="mt-1 text-xs text-slate-300 font-mono tabular-nums">
-              Meta: {factory.targetIrogPercent !== null ? `${factory.targetIrogPercent}%` : 'Não definida'}
-            </div>
+            {factory.irogPercent !== null ? (
+              <>
+                <div className="mt-2 text-3xl font-display font-bold font-mono tabular-nums">{factory.irogPercent.toFixed(1)}%</div>
+                <div className="mt-1 text-xs text-slate-300 font-mono tabular-nums">
+                  Meta: {factory.targetIrogPercent !== null ? `${factory.targetIrogPercent}%` : 'não definida'}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mt-2 text-xl font-display font-bold">Em implantação</div>
+                <div className="mt-1 text-xs text-blue-100">{pendingHint(factory.memory.incompleteReasons)}</div>
+                <button
+                  type="button"
+                  onClick={() => setMemoryEntity(factory)}
+                  className="mt-2 text-[11px] text-blue-200 hover:text-white underline underline-offset-2 cursor-pointer"
+                >
+                  Ver o que falta
+                </button>
+              </>
+            )}
           </div>
 
           {/* 2. Disponibilidade */}
@@ -351,7 +489,7 @@ export function IrogFactoryDashboard({ catalog, onOpenTvMode, onDrilldown }: Iro
               <Clock className="w-4 h-4 text-blue-600" />
             </div>
             <div className="mt-2 text-2xl font-display font-bold font-mono tabular-nums text-[#0f2544]">
-              {fmtPct(factory.availabilityPercent)}
+              <Pct v={factory.availabilityPercent} />
             </div>
             <div className="mt-1 text-xs text-slate-500 font-mono tabular-nums">
               Operação: {fmtMinutes(factory.operatingTimeMinutes)}
@@ -364,10 +502,19 @@ export function IrogFactoryDashboard({ catalog, onOpenTvMode, onDrilldown }: Iro
               <span>Desempenho</span>
               <TrendingUp className="w-4 h-4 text-blue-600" />
             </div>
-            <div className="mt-2 text-2xl font-display font-bold font-mono tabular-nums text-[#0f2544]">
-              {fmtPct(factory.performancePercent)}
-            </div>
-            <div className="mt-1 text-xs text-slate-500">Ritmo real vs ciclo padrão</div>
+            {factory.performancePercent !== null ? (
+              <>
+                <div className="mt-2 text-2xl font-display font-bold font-mono tabular-nums text-[#0f2544]">
+                  {factory.performancePercent.toFixed(1)}%
+                </div>
+                <div className="mt-1 text-xs text-slate-500">Ritmo real vs ciclo padrão</div>
+              </>
+            ) : (
+              <>
+                <div className="mt-2 text-lg font-display font-semibold text-slate-400">Em implantação</div>
+                <div className="mt-1 text-xs text-slate-500">Depende dos padrões de ciclo</div>
+              </>
+            )}
           </div>
 
           {/* 4. Qualidade */}
@@ -377,10 +524,10 @@ export function IrogFactoryDashboard({ catalog, onOpenTvMode, onDrilldown }: Iro
               <PackageCheck className="w-4 h-4 text-emerald-600" />
             </div>
             <div className="mt-2 text-2xl font-display font-bold font-mono tabular-nums text-emerald-700">
-              {fmtPct(factory.qualityPercent)}
+              <Pct v={factory.qualityPercent} />
             </div>
             <div className="mt-1 text-xs text-slate-500 font-mono tabular-nums">
-              Aprovado: {fmtNum(factory.approvedQuantity)}
+              Aprovado: {fmtNum(factory.approvedQuantity)} kg
             </div>
           </div>
 
@@ -405,9 +552,9 @@ export function IrogFactoryDashboard({ catalog, onOpenTvMode, onDrilldown }: Iro
               <PackageCheck className="w-4 h-4 text-blue-600" />
             </div>
             <div className="mt-2 text-2xl font-display font-bold font-mono tabular-nums text-blue-700">
-              {fmtNum(factory.producedQuantity)}
+              {fmtNum(factory.producedQuantity)} <span className="text-sm font-normal text-slate-500">kg</span>
             </div>
-            <div className="mt-1 text-xs text-slate-500">Volume produzido no escopo</div>
+            <div className="mt-1 text-xs text-slate-500">{factory.recordsCount} apontamentos no período</div>
           </div>
 
           {/* 7. Atingimento de Meta */}
@@ -439,7 +586,7 @@ export function IrogFactoryDashboard({ catalog, onOpenTvMode, onDrilldown }: Iro
               <AlertTriangle className="w-4 h-4 text-red-600" />
             </div>
             <div className="mt-2 text-2xl font-display font-bold font-mono tabular-nums text-red-700">
-              {fmtNum(factory.lossQuantity)}
+              {fmtNum(factory.lossQuantity)} <span className="text-sm font-normal text-slate-500">kg</span>
             </div>
             <div className="mt-1 text-xs font-mono tabular-nums text-slate-500">
               Índice: {lossPercent.toFixed(2)}%
@@ -449,14 +596,14 @@ export function IrogFactoryDashboard({ catalog, onOpenTvMode, onDrilldown }: Iro
           {/* 9. Tempo Total de Paradas */}
           <div className="bg-white border border-slate-200 rounded-xl p-5">
             <div className="flex items-center justify-between text-xs text-slate-500">
-              <span>Tempo Total de Paradas</span>
+              <span>Tempo Programado sem Produção</span>
               <Clock className="w-4 h-4 text-red-600" />
             </div>
-            <div className="mt-2 text-2xl font-display font-bold font-mono tabular-nums text-[#0f2544]">
-              {fmtMinutes(factory.downtimeMinutes)}
+            <div className="mt-2 text-2xl font-display font-bold font-mono tabular-nums text-red-700">
+              {fmtMinutes(idleMinutes + factory.downtimeMinutes)}
             </div>
-            <div className="mt-1 text-xs font-mono text-slate-500">
-              {factory.downtimeMinutes} minutos acumulados
+            <div className="mt-1 text-xs text-slate-500">
+              {fmtMinutes(factory.downtimeMinutes)} em paradas registradas · {fmtMinutes(idleMinutes)} sem apontamento
             </div>
           </div>
 
@@ -525,11 +672,11 @@ export function IrogFactoryDashboard({ catalog, onOpenTvMode, onDrilldown }: Iro
                   {overview.sectors.map((s) => (
                     <tr key={s.id} className="hover:bg-slate-50">
                       <td className="px-4 py-2.5 font-medium text-slate-900">{s.name}</td>
-                      <td className="px-4 py-2.5 text-right font-mono tabular-nums">{fmtPct(s.availabilityPercent)}</td>
-                      <td className="px-4 py-2.5 text-right font-mono tabular-nums">{fmtPct(s.performancePercent)}</td>
-                      <td className="px-4 py-2.5 text-right font-mono tabular-nums">{fmtPct(s.qualityPercent)}</td>
+                      <td className="px-4 py-2.5 text-right font-mono tabular-nums"><Pct v={s.availabilityPercent} /></td>
+                      <td className="px-4 py-2.5 text-right font-mono tabular-nums"><Pct v={s.performancePercent} /></td>
+                      <td className="px-4 py-2.5 text-right font-mono tabular-nums"><Pct v={s.qualityPercent} /></td>
                       <td className="px-4 py-2.5 text-right font-mono tabular-nums font-bold text-[#0f2544]">
-                        {fmtPct(s.irogPercent)}
+                        <Pct v={s.irogPercent} />
                       </td>
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
                         <button
@@ -583,7 +730,7 @@ export function IrogFactoryDashboard({ catalog, onOpenTvMode, onDrilldown }: Iro
                       <tr key={m.id} className="hover:bg-slate-50">
                         <td className="px-4 py-2.5">
                           <div className="font-medium text-slate-900">
-                            {m.code} — {m.name}
+                            {shortName(m)}
                           </div>
                           <div className="text-slate-500">{m.sectorName}</div>
                         </td>
@@ -607,7 +754,7 @@ export function IrogFactoryDashboard({ catalog, onOpenTvMode, onDrilldown }: Iro
                           </span>
                         </td>
                         <td className="px-4 py-2.5 text-right font-mono tabular-nums font-bold text-[#0f2544]">
-                          {fmtPct(m.irogPercent)}
+                          <Pct v={m.irogPercent} />
                         </td>
                         <td className="px-4 py-2.5 text-right font-mono tabular-nums text-slate-600">
                           {m.downtimeMinutes} min
@@ -641,232 +788,169 @@ export function IrogFactoryDashboard({ catalog, onOpenTvMode, onDrilldown }: Iro
         </section>
       )}
 
-      {/* 9 EXECUTIVE CHARTS */}
+      {/* 9 EXECUTIVE CHARTS — cada gráfico mostra os indicadores já calculados; o que está pendente
+          sai da legenda em vez de virar barra vazia. Sem animação: estável na TV e na impressão. */}
       {overview && charts && (
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {/* 1. Evolução Diária do IROG */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5">
-            <div className="mb-3">
-              <h3 className="text-sm font-display font-bold text-[#0f2544]">1. Evolução Diária do IROG (%)</h3>
-              <p className="text-xs text-slate-500">IROG, Disponibilidade, Desempenho e Qualidade dia a dia</p>
-            </div>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={charts.dailyIrog}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#64748b' }} />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" />
-                  <Tooltip />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Line type="monotone" dataKey="irog" name="IROG %" stroke="#0f2544" strokeWidth={2.5} />
-                  <Line type="monotone" dataKey="availability" name="Disp. %" stroke="#2563eb" strokeWidth={1.5} />
-                  <Line type="monotone" dataKey="performance" name="Desemp. %" stroke="#f59e0b" strokeWidth={1.5} />
-                  <Line type="monotone" dataKey="quality" name="Qualid. %" stroke="#16a34a" strokeWidth={1.5} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+          {/* 1. Evolução Diária */}
+          <ChartCard
+            title="1. Evolução Diária dos Indicadores"
+            subtitle={seriesSubtitle(dailyHas)}
+            empty={charts.dailyIrog.length === 0 ? 'Sem dados no período.' : null}
+          >
+            <LineChart data={charts.dailyIrog}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="date" tickFormatter={fmtDay} tick={{ fontSize: 11, fill: '#64748b' }} minTickGap={16} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" width={44} />
+              <Tooltip formatter={pctTip} labelFormatter={fmtDay} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              {dailyHas.irog && <Line type="monotone" dataKey="irog" name="IROG" stroke="#0f2544" strokeWidth={2.5} dot={false} connectNulls isAnimationActive={false} />}
+              {dailyHas.availability && <Line type="monotone" dataKey="availability" name="Disponibilidade" stroke="#2563eb" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />}
+              {dailyHas.performance && <Line type="monotone" dataKey="performance" name="Desempenho" stroke="#f59e0b" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />}
+              {dailyHas.quality && <Line type="monotone" dataKey="quality" name="Qualidade" stroke="#16a34a" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />}
+            </LineChart>
+          </ChartCard>
 
-          {/* 2. Evolução Semanal / Mensal */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-display font-bold text-[#0f2544]">2. IROG Semanal e Mensal</h3>
-                <p className="text-xs text-slate-500">Consolidação histórica por período</p>
-              </div>
+          {/* 2. Semanal / Mensal */}
+          <ChartCard
+            title={periodChartMode === 'weekly' ? '2. Indicadores por Semana' : '2. Indicadores por Mês'}
+            subtitle="Consolidação por período (soma de tempos, sem média de percentuais)"
+            empty={periodData.length === 0 ? 'Sem dados no período.' : null}
+            actions={
               <div className="inline-flex p-0.5 bg-slate-100 rounded-lg text-xs">
-                <button
-                  type="button"
-                  onClick={() => setPeriodChartMode('weekly')}
-                  className={`px-2.5 py-1 rounded-md cursor-pointer ${
-                    periodChartMode === 'weekly' ? 'bg-white text-[#0f2544] font-semibold shadow-sm' : 'text-slate-600'
-                  }`}
-                >
-                  Semanal
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPeriodChartMode('monthly')}
-                  className={`px-2.5 py-1 rounded-md cursor-pointer ${
-                    periodChartMode === 'monthly' ? 'bg-white text-[#0f2544] font-semibold shadow-sm' : 'text-slate-600'
-                  }`}
-                >
-                  Mensal
-                </button>
+                {(['weekly', 'monthly'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setPeriodChartMode(mode)}
+                    className={`px-2.5 py-1 rounded-md cursor-pointer ${
+                      periodChartMode === mode ? 'bg-white text-[#0f2544] font-semibold shadow-sm' : 'text-slate-600'
+                    }`}
+                  >
+                    {mode === 'weekly' ? 'Semanal' : 'Mensal'}
+                  </button>
+                ))}
               </div>
-            </div>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={periodChartMode === 'weekly' ? charts.weeklyIrog : charts.monthlyIrog}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="period" tick={{ fontSize: 11, fill: '#64748b' }} />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" />
-                  <Tooltip />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="irog" name="IROG %" fill="#0f2544" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="availability" name="Disponibilidade %" fill="#2563eb" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+            }
+          >
+            <BarChart data={periodData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="period" tickFormatter={fmtPeriod} tick={{ fontSize: 11, fill: '#64748b' }} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" width={44} />
+              <Tooltip formatter={pctTip} labelFormatter={fmtPeriod} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              {pctBars(periodHas, { irog: 'irog', availability: 'availability', performance: 'performance', quality: 'quality' })}
+            </BarChart>
+          </ChartCard>
 
-          {/* 3. IROG por Setor */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5">
-            <div className="mb-3">
-              <h3 className="text-sm font-display font-bold text-[#0f2544]">3. IROG por Setor</h3>
-              <p className="text-xs text-slate-500">Comparativo ponderado entre setores da fábrica</p>
-            </div>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={overview.sectors}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" />
-                  <Tooltip />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="irogPercent" name="IROG %" fill="#2563eb" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="targetIrogPercent" name="Meta %" fill="#cbd5e1" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+          {/* 3. Por Setor */}
+          <ChartCard title="3. Indicadores por Setor" subtitle="Comparativo ponderado por tempo entre os setores" empty={overview.sectors.length === 0 ? 'Sem setores com dados.' : null}>
+            <BarChart data={overview.sectors}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} interval={0} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" width={44} />
+              <Tooltip formatter={pctTip} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              {pctBars(entityHas(overview.sectors), ENTITY_KEYS)}
+            </BarChart>
+          </ChartCard>
 
-          {/* 4. IROG por Linha */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5">
-            <div className="mb-3">
-              <h3 className="text-sm font-display font-bold text-[#0f2544]">4. IROG por Linha de Produção</h3>
-              <p className="text-xs text-slate-500">Identificação de linhas abaixo da meta</p>
-            </div>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={overview.lines}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="code" tick={{ fontSize: 11, fill: '#64748b' }} />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" />
-                  <Tooltip />
-                  <Bar dataKey="irogPercent" name="IROG %" fill="#0f2544" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+          {/* 4. Por Linha */}
+          <ChartCard title="4. Indicadores por Linha de Produção" subtitle="Disponibilidade, desempenho e qualidade por linha" empty={overview.lines.length === 0 ? 'Sem linhas com dados.' : null}>
+            <BarChart data={overview.lines.map((l) => ({ ...l, label: l.code ?? l.name }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} interval={0} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" width={44} />
+              <Tooltip formatter={pctTip} labelFormatter={(_l: any, p: any) => (p?.[0]?.payload?.name as string) ?? String(_l)} />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              {pctBars(entityHas(overview.lines), ENTITY_KEYS)}
+            </BarChart>
+          </ChartCard>
 
           {/* 5. Ranking de Máquinas */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5">
-            <div className="mb-3">
-              <h3 className="text-sm font-display font-bold text-[#0f2544]">5. Ranking de Máquinas (IROG %)</h3>
-              <p className="text-xs text-slate-500">Desempenho individual por equipamento</p>
-            </div>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={overview.machines.slice().sort((a, b) => (b.irogPercent ?? 0) - (a.irogPercent ?? 0))}
-                  layout="vertical"
-                  margin={{ left: 10 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" />
-                  <YAxis dataKey="code" type="category" width={85} tick={{ fontSize: 11, fill: '#334155' }} />
-                  <Tooltip />
-                  <Bar dataKey="irogPercent" name="IROG %" fill="#2563eb" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+          <ChartCard
+            title={`5. Ranking de Máquinas — ${rankingMetric.label}`}
+            subtitle={rankingMetric.key === 'irogPercent' ? 'IROG individual por equipamento' : 'Ordenado pela disponibilidade enquanto o IROG está em implantação'}
+            empty={ranking.length === 0 ? 'Nenhuma máquina com o indicador calculado.' : null}
+          >
+            <BarChart data={ranking} layout="vertical" margin={{ left: 8, right: 24 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" />
+              <YAxis dataKey="label" type="category" width={150} tick={{ fontSize: 11, fill: '#334155' }} />
+              <Tooltip formatter={pctTip} />
+              <Bar dataKey={rankingMetric.key} name={rankingMetric.label} fill="#2563eb" radius={[0, 4, 4, 0]} isAnimationActive={false} label={{ position: 'right', fontSize: 11, fill: '#0f2544', formatter: (v: any) => (v == null ? '' : `${Number(v).toFixed(1)}%`) }} />
+            </BarChart>
+          </ChartCard>
 
-          {/* 6. Principais Motivos de Parada */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5">
-            <div className="mb-3">
-              <h3 className="text-sm font-display font-bold text-[#0f2544]">6. Principais Motivos de Parada</h3>
-              <p className="text-xs text-slate-500">Tempo perdido acumulado em minutos</p>
-            </div>
-            <div className="h-64">
-              {charts.downtimeByReason.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-xs text-slate-500">
-                  Nenhuma parada registrada no filtro atual.
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={charts.downtimeByReason.slice(0, 7)} layout="vertical" margin={{ left: 15 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis type="number" tick={{ fontSize: 11, fill: '#64748b' }} unit="m" />
-                    <YAxis dataKey="reason" type="category" width={145} tick={{ fontSize: 10, fill: '#334155' }} />
-                    <Tooltip />
-                    <Bar dataKey="minutes" name="Minutos" fill="#dc2626" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+          {/* 6. Motivos de Parada */}
+          <ChartCard title="6. Principais Motivos de Parada" subtitle="Tempo parado registrado, em minutos" empty={charts.downtimeByReason.length === 0 ? 'Nenhuma parada registrada no período.' : null}>
+            <BarChart data={charts.downtimeByReason.slice(0, 7)} layout="vertical" margin={{ left: 8, right: 40 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis type="number" tick={{ fontSize: 11, fill: '#64748b' }} />
+              <YAxis dataKey="reason" type="category" width={190} tick={{ fontSize: 10, fill: '#334155' }} />
+              <Tooltip formatter={(v: any) => `${v} min`} />
+              <Bar dataKey="minutes" name="Minutos" fill="#dc2626" maxBarSize={34} radius={[0, 4, 4, 0]} isAnimationActive={false} label={{ position: 'right', fontSize: 11, fill: '#334155', formatter: (v: any) => `${v} min` }} />
+            </BarChart>
+          </ChartCard>
+
+          {/* 7. Motivos de Perda */}
+          <ChartCard title="7. Principais Motivos de Perda" subtitle="Perdas registradas, em kg" empty={charts.lossByReason.length === 0 ? 'Nenhuma perda registrada no período.' : null}>
+            <BarChart data={charts.lossByReason.slice(0, 7)} layout="vertical" margin={{ left: 8, right: 56 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis type="number" tick={{ fontSize: 11, fill: '#64748b' }} />
+              <YAxis dataKey="reason" type="category" width={190} tick={{ fontSize: 10, fill: '#334155' }} />
+              <Tooltip formatter={(v: any) => `${fmtNum(Number(v))} kg`} />
+              <Bar dataKey="quantity" name="kg" fill="#f59e0b" maxBarSize={34} radius={[0, 4, 4, 0]} isAnimationActive={false} label={{ position: 'right', fontSize: 11, fill: '#334155', formatter: (v: any) => `${fmtNum(Number(v))} kg` }} />
+            </BarChart>
+          </ChartCard>
+
+          {/* 8. Por Turno */}
+          {shiftHasPct ? (
+            <ChartCard title="8. Indicadores por Turno" subtitle="Comparação dos três pilares entre turnos">
+              <BarChart data={charts.byShift}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} interval={0} />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" width={44} />
+                <Tooltip formatter={pctTip} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                {pctBars(periodLikeHas(charts.byShift), { irog: 'irog', availability: 'availability', performance: 'performance', quality: 'quality' })}
+              </BarChart>
+            </ChartCard>
+          ) : (
+            <ChartCard
+              title="8. Produção por Turno (kg)"
+              subtitle={`${noShiftShare}% do volume foi apontado sem turno no Iniflex — indicadores por turno indisponíveis`}
+              empty={charts.byShift.length === 0 ? 'Sem produção no período.' : null}
+            >
+              <BarChart data={charts.byShift} margin={{ top: 18 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} interval={0} />
+                <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={(v) => fmtNum(Number(v))} width={56} />
+                <Tooltip formatter={(v: any) => `${fmtNum(Number(v))} kg`} />
+                <Bar dataKey="realized" name="Produção (kg)" fill="#2563eb" radius={[4, 4, 0, 0]} isAnimationActive={false} label={{ position: 'top', fontSize: 11, fill: '#0f2544', formatter: (v: any) => fmtNum(Number(v)) }} />
+              </BarChart>
+            </ChartCard>
+          )}
+
+          {/* 9. Produção diária (com planejado quando houver OPs planejadas) */}
+          <ChartCard
+            wide
+            title={dailyHasPlanned ? '9. Planejado versus Realizado Diário (kg)' : '9. Produção Diária (kg)'}
+            subtitle={dailyHasPlanned ? 'Aderência do volume diário ao programado' : 'Peso líquido apontado por dia · o planejado aparece quando as OPs trouxerem a quantidade programada'}
+            empty={charts.dailyIrog.length === 0 ? 'Sem produção no período.' : null}
+          >
+            <AreaChart data={charts.dailyIrog}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="date" tickFormatter={fmtDay} tick={{ fontSize: 11, fill: '#64748b' }} minTickGap={16} />
+              <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={(v) => fmtNum(Number(v))} width={56} />
+              <Tooltip formatter={(v: any) => `${fmtNum(Number(v))} kg`} labelFormatter={fmtDay} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              {dailyHasPlanned && (
+                <Area type="monotone" dataKey="planned" name="Planejado" stroke="#64748b" fill="#cbd5e1" fillOpacity={0.3} isAnimationActive={false} />
               )}
-            </div>
-          </div>
-
-          {/* 7. Principais Motivos de Perda */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5">
-            <div className="mb-3">
-              <h3 className="text-sm font-display font-bold text-[#0f2544]">7. Principais Motivos de Perda</h3>
-              <p className="text-xs text-slate-500">Refugos, retrabalhos e perdas operacionais</p>
-            </div>
-            <div className="h-64">
-              {charts.lossByReason.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-xs text-slate-500">
-                  Nenhuma perda detalhada registrada no filtro atual.
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={charts.lossByReason.slice(0, 7)} layout="vertical" margin={{ left: 15 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis type="number" tick={{ fontSize: 11, fill: '#64748b' }} />
-                    <YAxis dataKey="reason" type="category" width={145} tick={{ fontSize: 10, fill: '#334155' }} />
-                    <Tooltip />
-                    <Bar dataKey="quantity" name="Quantidade" fill="#f59e0b" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </div>
-
-          {/* 8. A/P/Q por Turno */}
-          <div className="bg-white border border-slate-200 rounded-xl p-5">
-            <div className="mb-3">
-              <h3 className="text-sm font-display font-bold text-[#0f2544]">
-                8. Disponibilidade, Desempenho e Qualidade por Turno
-              </h3>
-              <p className="text-xs text-slate-500">Comparação dos três pilares entre turnos</p>
-            </div>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={charts.byShift}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: '#64748b' }} unit="%" />
-                  <Tooltip />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="availability" name="Disp. %" fill="#2563eb" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="performance" name="Desemp. %" fill="#f59e0b" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="quality" name="Qualid. %" fill="#16a34a" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* 9. Planejado versus Realizado */}
-          <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-5">
-            <div className="mb-3">
-              <h3 className="text-sm font-display font-bold text-[#0f2544]">9. Planejado versus Realizado Diário</h3>
-              <p className="text-xs text-slate-500">Aderência de volume diário frente ao programado</p>
-            </div>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={charts.dailyIrog}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#64748b' }} />
-                  <YAxis tick={{ fontSize: 11, fill: '#64748b' }} />
-                  <Tooltip />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Area type="monotone" dataKey="planned" name="Planejado" stroke="#64748b" fill="#cbd5e1" fillOpacity={0.3} />
-                  <Area type="monotone" dataKey="realized" name="Realizado" stroke="#2563eb" fill="#3b82f6" fillOpacity={0.25} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+              <Area type="monotone" dataKey="realized" name="Realizado" stroke="#2563eb" strokeWidth={2} fill="#3b82f6" fillOpacity={0.2} isAnimationActive={false} />
+            </AreaChart>
+          </ChartCard>
         </section>
       )}
 

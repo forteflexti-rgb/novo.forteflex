@@ -53,7 +53,7 @@ const REPORT_CATALOG: Array<{ id: ReportId; title: string; subtitle: string }> =
 ];
 
 function fmtPct(v: number | null): string {
-  return v === null ? 'Incompleto' : `${v.toFixed(1)}%`;
+  return v === null ? 'Pendente' : `${v.toFixed(1)}%`;
 }
 
 export function AdminReportsView({ catalog }: AdminReportsViewProps) {
@@ -190,7 +190,7 @@ export function AdminReportsView({ catalog }: AdminReportsViewProps) {
           rows: overview.machines.map((m) => [
             `${m.code} — ${m.name}`,
             m.memory.operatingTimeMinutes,
-            m.memory.standardEarnedMinutes ?? 'Incompleto',
+            m.memory.standardEarnedMinutes ?? 'Pendente',
             m.producedQuantity,
             fmtPct(m.performancePercent),
           ]),

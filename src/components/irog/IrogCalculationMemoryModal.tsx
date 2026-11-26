@@ -8,7 +8,7 @@ interface IrogCalculationMemoryModalProps {
 }
 
 function fmtPct(v: number | null): string {
-  return v === null ? 'Incompleto' : `${v.toFixed(2)}%`;
+  return v === null ? 'Pendente' : `${v.toFixed(2)}%`;
 }
 
 function fmtNum(v: number | null): string {

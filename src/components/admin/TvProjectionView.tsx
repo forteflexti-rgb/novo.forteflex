@@ -34,8 +34,24 @@ function fmtNum(n: number): string {
 }
 
 function fmtPct(v: number | null): string {
-  return v === null ? 'Incompleto' : `${v.toFixed(1)}%`;
+  return v === null ? 'Em implantação' : `${v.toFixed(1)}%`;
 }
+
+/** Valor grande da TV: pendente aparece discreto, nunca como erro. */
+function TvValue({ v }: { v: number | null }) {
+  if (v === null) return <span className="text-lg font-sans font-semibold text-slate-400">Em implantação</span>;
+  return <>{v.toFixed(1)}%</>;
+}
+
+/** IROG quando calculado; senão a disponibilidade, com o rótulo certo. */
+function headline(e: { irogPercent: number | null; availabilityPercent: number | null }) {
+  return e.irogPercent !== null ? { label: 'IROG', value: e.irogPercent } : { label: 'Disp.', value: e.availabilityPercent };
+}
+
+const fmtDay = (v: unknown) => {
+  const d = String(v ?? '');
+  return d.length >= 10 ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : d;
+};
 
 function fmtMin(totalMin: number): string {
   const h = Math.floor(totalMin / 60);
@@ -176,6 +192,7 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
 
   const f = overview?.factory;
   const mc = overview?.machineCounts;
+  const dailyHasIrog = (overview?.charts.dailyIrog ?? []).some((d) => d.irog !== null) && f?.irogPercent !== null;
 
   return (
     <div className="min-h-screen bg-[#071324] text-slate-100 flex flex-col select-none">
@@ -219,15 +236,17 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
             <option value="all">Todo o histórico</option>
           </select>
 
-          <label className="inline-flex items-center gap-1.5 text-xs text-slate-300 px-2.5 py-1.5 rounded-lg bg-[#0f2544] border border-slate-700 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={includeDemo}
-              onChange={(e) => setIncludeDemo(e.target.checked)}
-              className="rounded border-slate-500 text-blue-500"
-            />
-            <span>Demo</span>
-          </label>
+          {overview && overview.demoRecordsCount > 0 && (
+            <label className="inline-flex items-center gap-1.5 text-xs text-slate-300 px-2.5 py-1.5 rounded-lg bg-[#0f2544] border border-slate-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={includeDemo}
+                onChange={(e) => setIncludeDemo(e.target.checked)}
+                className="rounded border-slate-500 text-blue-500"
+              />
+              <span>Demo</span>
+            </label>
+          )}
 
           <div className="inline-flex items-center p-1 bg-[#071324] border border-slate-700 rounded-lg">
             <button
@@ -320,40 +339,40 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
             <div className="bg-blue-700 border border-blue-500 rounded-xl p-5">
               <div className="text-xs font-medium text-blue-100">IROG Geral</div>
               <div className="mt-2 text-3xl lg:text-4xl font-display font-bold font-mono tabular-nums text-white">
-                {fmtPct(f.irogPercent)}
+                {f.irogPercent !== null ? `${f.irogPercent.toFixed(1)}%` : <span className="text-2xl font-sans">Em implantação</span>}
               </div>
               <div className="mt-1.5 text-xs text-blue-100 font-mono">
-                Meta: {f.targetIrogPercent !== null ? `${f.targetIrogPercent}%` : '—'}
+                {f.irogPercent !== null ? `Meta: ${f.targetIrogPercent !== null ? `${f.targetIrogPercent}%` : 'não definida'}` : 'Aguardando padrões de ciclo'}
               </div>
             </div>
 
             <div className="bg-[#0f2544] border border-slate-700/80 rounded-xl p-5">
               <div className="text-xs font-medium text-slate-300">Disponibilidade</div>
               <div className="mt-2 text-3xl lg:text-4xl font-display font-bold font-mono tabular-nums text-blue-300">
-                {fmtPct(f.availabilityPercent)}
+                <TvValue v={f.availabilityPercent} />
               </div>
               <div className="mt-1.5 text-xs font-mono text-slate-400">
-                Paradas: {fmtMin(f.downtimeMinutes)}
+                Sem produção: {fmtMin(Math.max(0, f.plannedTimeMinutes - f.operatingTimeMinutes))}
               </div>
             </div>
 
             <div className="bg-[#0f2544] border border-slate-700/80 rounded-xl p-5">
               <div className="text-xs font-medium text-slate-300">Desempenho</div>
               <div className="mt-2 text-3xl lg:text-4xl font-display font-bold font-mono tabular-nums text-amber-300">
-                {fmtPct(f.performancePercent)}
+                <TvValue v={f.performancePercent} />
               </div>
               <div className="mt-1.5 text-xs font-mono text-slate-400">
-                Produzido: {fmtNum(f.producedQuantity)}
+                Produzido: {fmtNum(f.producedQuantity)} kg
               </div>
             </div>
 
             <div className="bg-[#0f2544] border border-slate-700/80 rounded-xl p-5">
               <div className="text-xs font-medium text-slate-300">Qualidade</div>
               <div className="mt-2 text-3xl lg:text-4xl font-display font-bold font-mono tabular-nums text-emerald-400">
-                {fmtPct(f.qualityPercent)}
+                <TvValue v={f.qualityPercent} />
               </div>
               <div className="mt-1.5 text-xs font-mono text-red-300">
-                Perdas: {fmtNum(f.lossQuantity)}
+                Perdas: {fmtNum(f.lossQuantity)} kg
               </div>
             </div>
 
@@ -370,10 +389,10 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
             <div className="bg-[#0f2544] border border-slate-700/80 rounded-xl p-5">
               <div className="text-xs font-medium text-slate-300">Atingimento Volume</div>
               <div className="mt-2 text-3xl lg:text-4xl font-display font-bold font-mono tabular-nums text-white">
-                {f.goalAttainmentPercent.toFixed(1)}%
+                {f.plannedQuantity > 0 ? `${f.goalAttainmentPercent.toFixed(1)}%` : <span className="text-lg font-sans font-semibold text-slate-400">Sem planejamento</span>}
               </div>
               <div className="mt-1.5 text-xs font-mono text-slate-400">
-                Meta: {fmtNum(f.plannedQuantity)}
+                {f.plannedQuantity > 0 ? `Planejado: ${fmtNum(f.plannedQuantity)} kg` : 'OPs sem quantidade programada'}
               </div>
             </div>
           </section>
@@ -383,21 +402,21 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
         {overview && activeSlide === 0 && (
           <section className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5">
             <div className="lg:col-span-6 bg-[#0f2544] border border-slate-700/80 rounded-xl p-6 flex flex-col">
-              <h2 className="text-lg font-display font-bold text-white mb-1">Evolução Diária do IROG (%)</h2>
-              <p className="text-xs text-slate-400 mb-4">IROG, Disponibilidade e Qualidade consolidados</p>
+              <h2 className="text-lg font-display font-bold text-white mb-1">Evolução Diária dos Indicadores (%)</h2>
+              <p className="text-xs text-slate-400 mb-4">{dailyHasIrog ? 'IROG, Disponibilidade e Qualidade' : 'Disponibilidade e Qualidade · IROG em implantação'}</p>
               <div className="flex-1 min-h-[290px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={overview.charts.dailyIrog}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1e3a5f" />
-                    <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#cbd5e1' }} />
+                    <XAxis dataKey="date" tickFormatter={fmtDay} minTickGap={18} tick={{ fontSize: 12, fill: '#cbd5e1' }} />
                     <YAxis domain={[0, 100]} tick={{ fontSize: 12, fill: '#cbd5e1' }} unit="%" />
                     <Tooltip
                       contentStyle={{ backgroundColor: '#09172b', borderColor: '#334155', color: '#f8fafc' }}
                     />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Line type="monotone" dataKey="irog" name="IROG %" stroke="#3b82f6" strokeWidth={3} />
-                    <Line type="monotone" dataKey="availability" name="Disp. %" stroke="#93c5fd" strokeWidth={2} />
-                    <Line type="monotone" dataKey="quality" name="Qualid. %" stroke="#34d399" strokeWidth={2} />
+                    {dailyHasIrog && <Line type="monotone" dataKey="irog" name="IROG" stroke="#3b82f6" strokeWidth={3} dot={false} connectNulls isAnimationActive={false} />}
+                    <Line type="monotone" dataKey="availability" name="Disponibilidade" stroke="#93c5fd" strokeWidth={2.5} dot={false} connectNulls isAnimationActive={false} />
+                    <Line type="monotone" dataKey="quality" name="Qualidade" stroke="#34d399" strokeWidth={2.5} dot={false} connectNulls isAnimationActive={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -405,27 +424,29 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
 
             <div className="lg:col-span-6 bg-[#0f2544] border border-slate-700/80 rounded-xl p-6 flex flex-col gap-5">
               <div>
-                <h2 className="text-lg font-display font-bold text-white">IROG por Setor &amp; Linha</h2>
-                <p className="text-xs text-slate-400">Desempenho frente às metas configuradas</p>
+                <h2 className="text-lg font-display font-bold text-white">{dailyHasIrog ? 'IROG por Setor & Linha' : 'Disponibilidade por Setor & Linha'}</h2>
+                <p className="text-xs text-slate-400">{dailyHasIrog ? 'Frente às metas cadastradas' : 'IROG em implantação: aguardando os padrões de ciclo'}</p>
               </div>
               <div className="space-y-4">
                 {overview.sectors.map((sec) => {
-                  const val = sec.irogPercent ?? 0;
-                  const target = sec.targetIrogPercent ?? 78;
+                  const h = headline(sec);
+                  const val = h.value ?? 0;
+                  const target = h.label === 'IROG' ? sec.targetIrogPercent : null;
                   return (
                     <div key={sec.id} className="space-y-1.5">
                       <div className="flex items-baseline justify-between">
                         <span className="text-base font-semibold text-white">{sec.name}</span>
                         <span className="font-mono tabular-nums text-sm">
-                          <strong className={val >= target ? 'text-emerald-400' : 'text-amber-300'}>
-                            {fmtPct(sec.irogPercent)}
+                          <span className="text-slate-400 mr-2 text-xs">{h.label}</span>
+                          <strong className={target === null || val >= target ? 'text-emerald-400' : 'text-amber-300'}>
+                            {fmtPct(h.value)}
                           </strong>
-                          <span className="text-slate-400 ml-2">(Meta {target}%)</span>
+                          {target !== null && <span className="text-slate-400 ml-2">(Meta {target}%)</span>}
                         </span>
                       </div>
                       <div className="w-full h-3 bg-[#071324] rounded-full overflow-hidden border border-slate-700">
                         <div
-                          className={`h-full rounded-full ${val >= target ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                          className={`h-full rounded-full ${target !== null && val >= target ? 'bg-emerald-500' : 'bg-blue-500'}`}
                           style={{ width: `${Math.min(100, val)}%` }}
                         />
                       </div>
@@ -438,7 +459,7 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
                 {overview.lines.slice(0, 6).map((l) => (
                   <div key={l.id} className="p-3 rounded-lg bg-[#09172b] border border-slate-700/70">
                     <div className="text-xs font-mono text-blue-300">{l.code}</div>
-                    <div className="text-xl font-mono font-bold text-white mt-0.5">{fmtPct(l.irogPercent)}</div>
+                    <div className="text-xl font-mono font-bold text-white mt-0.5"><span className="text-[11px] font-sans font-normal text-slate-400 mr-1">{headline(l).label}</span>{fmtPct(headline(l).value)}</div>
                     <div className="text-[11px] text-slate-400 truncate">{l.name}</div>
                   </div>
                 ))}
@@ -453,7 +474,7 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               <div className="bg-[#0f2544] border border-slate-700/80 rounded-xl p-5">
                 <h2 className="text-base font-display font-bold text-white mb-3">
-                  Situação das Máquinas (IROG Individual)
+                  Situação das Máquinas
                 </h2>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {overview.machines.slice(0, 9).map((m) => (
@@ -472,7 +493,7 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
                           {m.machineStatus === 'operating' ? 'Operando' : m.machineStatus === 'stopped' ? 'Parada' : 'Manut.'}
                         </span>
                       </div>
-                      <div className="text-xl font-mono font-bold text-white mt-1">{fmtPct(m.irogPercent)}</div>
+                      <div className="text-xl font-mono font-bold text-white mt-1"><span className="text-[11px] font-sans font-normal text-slate-400 mr-1">{headline(m).label}</span>{fmtPct(headline(m).value)}</div>
                       <div className="text-[11px] text-slate-400 truncate">{m.name}</div>
                     </div>
                   ))}
