@@ -321,30 +321,40 @@ export const api = {
 
   getProductionRecords: async (filters?: Partial<DashboardFilters>) => {
     if (isSupabaseConfigured && supabase) {
-      let query = supabase
-        .from('production_records')
-        .select(`
-          *,
-          operator:profiles!operator_id(full_name),
-          sector:sectors!sector_id(name),
-          line:production_lines!line_id(name),
-          product:products!product_id(name, sku),
-          shift:shifts!shift_id(name),
-          downtime_records(*)
-        `)
-        .order('production_date', { ascending: false })
-        .order('created_at', { ascending: false });
+      // O Supabase devolve no máximo 1000 linhas por consulta: busca em páginas, com ordem estável
+      // (id como desempate) para não pular nem repetir registros entre páginas.
+      const PAGE = 1000;
+      const data: any[] = [];
+      for (let from = 0; ; from += PAGE) {
+        let query = supabase
+          .from('production_records')
+          .select(`
+            *,
+            operator:profiles!operator_id(full_name),
+            sector:sectors!sector_id(name),
+            line:production_lines!line_id(name),
+            product:products!product_id(name, sku),
+            shift:shifts!shift_id(name),
+            downtime_records(*)
+          `)
+          .order('production_date', { ascending: false })
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: true })
+          .range(from, from + PAGE - 1);
 
-      if (filters?.startDate) query = query.gte('production_date', filters.startDate);
-      if (filters?.endDate) query = query.lte('production_date', filters.endDate);
-      if (filters?.shiftId) query = query.eq('shift_id', filters.shiftId);
-      if (filters?.sectorId) query = query.eq('sector_id', filters.sectorId);
-      if (filters?.lineId) query = query.eq('line_id', filters.lineId);
-      if (filters?.productId) query = query.eq('product_id', filters.productId);
-      if (filters?.operatorId) query = query.eq('operator_id', filters.operatorId);
+        if (filters?.startDate) query = query.gte('production_date', filters.startDate);
+        if (filters?.endDate) query = query.lte('production_date', filters.endDate);
+        if (filters?.shiftId) query = query.eq('shift_id', filters.shiftId);
+        if (filters?.sectorId) query = query.eq('sector_id', filters.sectorId);
+        if (filters?.lineId) query = query.eq('line_id', filters.lineId);
+        if (filters?.productId) query = query.eq('product_id', filters.productId);
+        if (filters?.operatorId) query = query.eq('operator_id', filters.operatorId);
 
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
+        const { data: page, error } = await query;
+        if (error) throw new Error(error.message);
+        data.push(...(page || []));
+        if (!page || page.length < PAGE) break;
+      }
 
       const records: ProductionRecord[] = (data || []).map((row: any) => ({
         ...row,
