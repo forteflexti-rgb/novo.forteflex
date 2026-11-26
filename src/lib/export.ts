@@ -1,5 +1,58 @@
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import type { ProductionRecord } from '../types';
+
+/** Exporta linhas genéricas para Excel (relatórios gerenciais). */
+export function exportRowsToExcel(
+  rows: Record<string, string | number | boolean | null | undefined>[],
+  sheetName: string,
+  filename: string
+) {
+  const worksheet = XLSX.utils.json_to_sheet(rows);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31));
+  XLSX.writeFile(workbook, filename);
+}
+
+/** Relatório em PDF (A4 paisagem) com cabeçalho, filtros aplicados e origem dos dados. */
+export function exportReportToPdf(params: {
+  title: string;
+  subtitle: string;
+  columns: string[];
+  rows: (string | number)[][];
+  filename: string;
+  /** Rodapé com a origem dos dados (ex.: "Iniflex RPCP622/RPCP019 + lançamentos manuais"). */
+  sourceNote?: string;
+}) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  doc.setFillColor(15, 37, 68);
+  doc.rect(0, 0, doc.internal.pageSize.getWidth(), 54, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(14);
+  doc.text(`novo.forteflex · IROG ForteFlex — ${params.title}`, 32, 26);
+  doc.setFontSize(9);
+  doc.setTextColor(203, 213, 225);
+  doc.text(`${params.subtitle} · Gerado em ${new Date().toLocaleString('pt-BR')}`, 32, 42);
+
+  autoTable(doc, {
+    startY: 68,
+    head: [params.columns],
+    body: params.rows,
+    styles: { fontSize: 8, cellPadding: 5, textColor: [15, 23, 42] },
+    headStyles: { fillColor: [15, 37, 68], textColor: [255, 255, 255], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    didDrawPage: () => {
+      if (!params.sourceNote) return;
+      const h = doc.internal.pageSize.getHeight();
+      doc.setFontSize(7.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Origem dos dados: ${params.sourceNote}`, 32, h - 18);
+    },
+  });
+
+  doc.save(params.filename);
+}
 
 export function exportProductionRecordsToExcel(records: ProductionRecord[], filename = 'novoforteflex-producao.xlsx') {
   const rows = records.map((r) => ({

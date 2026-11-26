@@ -124,6 +124,11 @@ export interface ProductionRecord {
   created_by_name?: string;
   created_at: string;
   updated_at: string;
+  /** Origem do registro no Supabase: demo | manual | iniflex_report | iniflex_api. */
+  source?: string | null;
+  resource_id?: string | null;
+  machine_name?: string | null;
+  order_number?: string | null;
 }
 
 export interface CatalogData {
@@ -542,6 +547,8 @@ export interface IrogFactoryOverview {
 
 export interface DowntimeEvent {
   id: string;
+  /** Dia da parada (as paradas do Iniflex não têm hora de início). */
+  production_date?: string | null;
   production_record_id: string | null;
   machine_id: string | null;
   machine_code?: string | null;

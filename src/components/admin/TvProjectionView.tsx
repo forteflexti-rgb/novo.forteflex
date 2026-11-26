@@ -3,8 +3,8 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
-  AreaChart,
-  Area,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -19,28 +19,28 @@ import {
   Play,
   Pause,
   AlertCircle,
-  Clock,
-  TrendingUp,
-  TrendingDown,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { BrandMark } from '../BrandMark';
-import type { CatalogData, DashboardFilters, DashboardSummary, ProductionRecord } from '../../types';
+import type { CatalogData, DashboardFilters, IrogFactoryOverview, ProductionRecord } from '../../types';
 
 interface TvProjectionViewProps {
   catalog: CatalogData;
   onExit: () => void;
 }
 
-function formatNumber(n: number): string {
-  return new Intl.NumberFormat('pt-BR').format(n);
+function fmtNum(n: number): string {
+  return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(n);
 }
 
-function formatMinutes(totalMin: number): string {
+function fmtPct(v: number | null): string {
+  return v === null ? 'Incompleto' : `${v.toFixed(1)}%`;
+}
+
+function fmtMin(totalMin: number): string {
   const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  if (h === 0) return `${m} min`;
-  return `${h}h ${String(m).padStart(2, '0')}m`;
+  const m = Math.round(totalMin % 60);
+  return h === 0 ? `${m}m` : `${h}h ${String(m).padStart(2, '0')}m`;
 }
 
 function detectCurrentShift(shifts: CatalogData['shifts'], now: Date): string {
@@ -50,23 +50,46 @@ function detectCurrentShift(shifts: CatalogData['shifts'], now: Date): string {
     if (!s.active) continue;
     if (s.start_time <= s.end_time) {
       if (hhmm >= s.start_time && hhmm < s.end_time) return s.name;
-    } else {
-      if (hhmm >= s.start_time || hhmm < s.end_time) return s.name;
+    } else if (hhmm >= s.start_time || hhmm < s.end_time) {
+      return s.name;
     }
   }
   return shifts[0]?.name || 'Operação contínua';
+}
+
+type TvPeriod = 'today' | '7d' | '30d' | 'month' | 'all';
+
+/** Intervalo de datas (horário de Brasília) do período escolhido na TV. */
+function periodRange(p: TvPeriod): { startDate: string; endDate: string } {
+  const brt = (d: Date) => new Date(d.getTime() - 3 * 3600000).toISOString().slice(0, 10);
+  const now = new Date();
+  const today = brt(now);
+  const daysAgo = (n: number) => brt(new Date(now.getTime() - n * 86400000));
+  switch (p) {
+    case 'today':
+      return { startDate: today, endDate: today };
+    case '7d':
+      return { startDate: daysAgo(6), endDate: today };
+    case '30d':
+      return { startDate: daysAgo(29), endDate: today };
+    case 'month':
+      return { startDate: `${today.slice(0, 7)}-01`, endDate: today };
+    default:
+      return { startDate: '', endDate: '' };
+  }
 }
 
 export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
   const [now, setNow] = useState(() => new Date());
   const [sectorId, setSectorId] = useState('');
   const [includeDemo, setIncludeDemo] = useState(true);
+  const [period, setPeriod] = useState<TvPeriod>('all');
   const [refreshSeconds, setRefreshSeconds] = useState(30);
   const [autoSlide, setAutoSlide] = useState(true);
   const [activeSlide, setActiveSlide] = useState<0 | 1>(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [overview, setOverview] = useState<IrogFactoryOverview | null>(null);
   const [recentRecords, setRecentRecords] = useState<ProductionRecord[]>([]);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -75,9 +98,10 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
   const fetchData = useCallback(async () => {
     setRefreshing(true);
     setError(null);
+    const { startDate, endDate } = periodRange(period);
     const filters: DashboardFilters = {
-      startDate: '',
-      endDate: '',
+      startDate,
+      endDate,
       shiftId: '',
       sectorId,
       lineId: '',
@@ -86,34 +110,31 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
       includeDemo,
     };
     try {
-      const [sumRes, recRes] = await Promise.all([
-        api.getDashboardSummary(filters),
+      const [ovRes, recRes] = await Promise.all([
+        api.getIrogOverview(filters),
         api.getProductionRecords(filters),
       ]);
-      setSummary(sumRes);
-      setRecentRecords(recRes.records.slice(0, 7));
+      setOverview(ovRes);
+      setRecentRecords(recRes.records.slice(0, 6));
       setLastUpdated(new Date());
     } catch (err: any) {
-      setError(err.message || 'Falha ao atualizar dados do painel TV.');
+      setError(err.message || 'Falha ao atualizar painel TV.');
     } finally {
       setRefreshing(false);
     }
-  }, [sectorId, includeDemo]);
+  }, [sectorId, includeDemo, period]);
 
-  // Initial + periodic data refresh
   useEffect(() => {
     fetchData();
     const id = window.setInterval(fetchData, refreshSeconds * 1000);
     return () => window.clearInterval(id);
   }, [fetchData, refreshSeconds]);
 
-  // Live 1-second clock
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(id);
   }, []);
 
-  // Auto-rotate slides every 15s when enabled
   useEffect(() => {
     if (!autoSlide) return;
     const id = window.setInterval(() => {
@@ -122,24 +143,18 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
     return () => window.clearInterval(id);
   }, [autoSlide]);
 
-  // Track browser fullscreen state
   useEffect(() => {
-    const onFsChange = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
-    };
+    const onFsChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
     document.addEventListener('fullscreenchange', onFsChange);
     return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
   const toggleFullscreen = async () => {
     try {
-      if (!document.fullscreenElement) {
-        await document.documentElement.requestFullscreen();
-      } else {
-        await document.exitFullscreen();
-      }
+      if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+      else await document.exitFullscreen();
     } catch {
-      // Ignore if blocked by iframe/browser policy; full-viewport TV layout still works
+      // ignore if blocked by iframe policy
     }
   };
 
@@ -156,33 +171,32 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
 
   const currentShiftLabel = useMemo(() => detectCurrentShift(catalog.shifts, now), [catalog.shifts, now]);
   const selectedSectorName = sectorId
-    ? catalog.sectors.find((s) => s.id === sectorId)?.name || 'Setor selecionado'
-    : 'Planta Geral (Todos os Setores)';
+    ? catalog.sectors.find((s) => s.id === sectorId)?.name || 'Setor'
+    : 'Planta Geral (IROG ForteFlex)';
 
-  const kpis = summary?.kpis;
-  const charts = summary?.charts;
+  const f = overview?.factory;
+  const mc = overview?.machineCounts;
 
   return (
     <div className="min-h-screen bg-[#071324] text-slate-100 flex flex-col select-none">
-      {/* Top TV / Projector Header */}
+      {/* Header */}
       <header className="px-6 py-4 bg-[#0b1d36] border-b border-slate-700/70 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-5">
           <BrandMark variant="light" size="lg" />
           <div className="hidden sm:block pl-5 border-l border-slate-700">
-            <div className="text-xs font-medium text-blue-300">Gestão à Vista · Modo Projeção</div>
+            <div className="text-xs font-medium text-blue-300">Gestão à Vista · IROG ForteFlex</div>
             <div className="text-sm font-semibold text-white">
               {selectedSectorName} · {currentShiftLabel}
             </div>
           </div>
         </div>
 
-        {/* Controls & Live Clock */}
         <div className="flex flex-wrap items-center gap-3">
           <select
             aria-label="Filtrar setor na TV"
             value={sectorId}
             onChange={(e) => setSectorId(e.target.value)}
-            className="min-h-[38px] px-3 py-1.5 text-xs bg-[#0f2544] border border-slate-600 rounded-lg text-slate-100 focus:outline-none focus:border-blue-400"
+            className="min-h-[38px] px-3 py-1.5 text-xs bg-[#0f2544] border border-slate-600 rounded-lg text-slate-100"
           >
             <option value="">Todos os setores</option>
             {catalog.sectors.filter((s) => s.active).map((s) => (
@@ -190,6 +204,19 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
                 {s.name}
               </option>
             ))}
+          </select>
+
+          <select
+            aria-label="Período exibido na TV"
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as TvPeriod)}
+            className="min-h-[38px] px-3 py-1.5 text-xs bg-[#0f2544] border border-slate-600 rounded-lg text-slate-100"
+          >
+            <option value="today">Hoje</option>
+            <option value="7d">Últimos 7 dias</option>
+            <option value="30d">Últimos 30 dias</option>
+            <option value="month">Mês atual</option>
+            <option value="all">Todo o histórico</option>
           </select>
 
           <label className="inline-flex items-center gap-1.5 text-xs text-slate-300 px-2.5 py-1.5 rounded-lg bg-[#0f2544] border border-slate-700 cursor-pointer">
@@ -202,30 +229,28 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
             <span>Demo</span>
           </label>
 
-          {/* Slide switcher */}
           <div className="inline-flex items-center p-1 bg-[#071324] border border-slate-700 rounded-lg">
             <button
               type="button"
               onClick={() => setActiveSlide(0)}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer ${
+              className={`px-3 py-1 text-xs font-medium rounded-md cursor-pointer ${
                 activeSlide === 0 ? 'bg-blue-600 text-white' : 'text-slate-300 hover:text-white'
               }`}
             >
-              Visão 1: Metas
+              Visão 1: IROG &amp; Setores
             </button>
             <button
               type="button"
               onClick={() => setActiveSlide(1)}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors cursor-pointer ${
+              className={`px-3 py-1 text-xs font-medium rounded-md cursor-pointer ${
                 activeSlide === 1 ? 'bg-blue-600 text-white' : 'text-slate-300 hover:text-white'
               }`}
             >
-              Visão 2: Turnos e Linha
+              Visão 2: Máquinas &amp; Paradas
             </button>
             <button
               type="button"
               onClick={() => setAutoSlide((v) => !v)}
-              title={autoSlide ? 'Pausar alternância automática' : 'Retomar alternância automática'}
               className="ml-1 p-1.5 text-slate-300 hover:text-white rounded cursor-pointer"
             >
               {autoSlide ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
@@ -238,26 +263,24 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
             onChange={(e) => setRefreshSeconds(Number(e.target.value))}
             className="min-h-[38px] px-2.5 py-1.5 text-xs font-mono bg-[#0f2544] border border-slate-600 rounded-lg text-slate-100"
           >
-            <option value={15}>Atualizar: 15s</option>
-            <option value={30}>Atualizar: 30s</option>
-            <option value={60}>Atualizar: 1m</option>
-            <option value={300}>Atualizar: 5m</option>
+            <option value={15}>15s</option>
+            <option value={30}>30s</option>
+            <option value={60}>1m</option>
+            <option value={300}>5m</option>
           </select>
 
           <button
             type="button"
             onClick={fetchData}
-            title="Atualizar dados agora"
             className="min-h-[38px] px-3 py-1.5 bg-[#0f2544] hover:bg-[#17345e] border border-slate-600 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            <span className="hidden xl:inline">Atualizar</span>
           </button>
 
           <button
             type="button"
             onClick={toggleFullscreen}
-            className="min-h-[38px] px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+            className="min-h-[38px] px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer"
           >
             {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
             <span>{isFullscreen ? 'Sair Tela Cheia' : 'Tela Cheia'}</span>
@@ -266,10 +289,10 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
           <button
             type="button"
             onClick={handleExit}
-            className="min-h-[38px] px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-100 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+            className="min-h-[38px] px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-100 rounded-lg text-xs font-medium inline-flex items-center gap-1.5 cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Voltar ao Painel</span>
+            <span>Voltar</span>
           </button>
 
           <div className="pl-4 border-l border-slate-700 text-right hidden md:block">
@@ -290,196 +313,169 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
         </div>
       )}
 
-      {/* Main TV Content Viewport */}
       <main className="flex-1 p-6 flex flex-col gap-6 max-w-[1920px] w-full mx-auto">
-        {/* Top Large KPI Strip (always visible on TV) */}
-        {kpis && (
+        {/* Top IROG KPI Strip */}
+        {f && mc && (
           <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-            <div className="bg-[#0f2544] border border-slate-700/80 rounded-xl p-5">
-              <div className="text-xs font-medium text-slate-300">Produção do Dia</div>
+            <div className="bg-blue-700 border border-blue-500 rounded-xl p-5">
+              <div className="text-xs font-medium text-blue-100">IROG Geral</div>
               <div className="mt-2 text-3xl lg:text-4xl font-display font-bold font-mono tabular-nums text-white">
-                {formatNumber(kpis.todayProduction)}
+                {fmtPct(f.irogPercent)}
               </div>
-              <div className="mt-1.5 text-xs text-slate-400">Volume apontado hoje</div>
+              <div className="mt-1.5 text-xs text-blue-100 font-mono">
+                Meta: {f.targetIrogPercent !== null ? `${f.targetIrogPercent}%` : '—'}
+              </div>
             </div>
 
             <div className="bg-[#0f2544] border border-slate-700/80 rounded-xl p-5">
-              <div className="text-xs font-medium text-slate-300">Produção do Mês</div>
+              <div className="text-xs font-medium text-slate-300">Disponibilidade</div>
               <div className="mt-2 text-3xl lg:text-4xl font-display font-bold font-mono tabular-nums text-blue-300">
-                {formatNumber(kpis.monthProduction)}
+                {fmtPct(f.availabilityPercent)}
               </div>
-              <div className="mt-1.5 text-xs text-slate-400">Acumulado mensal</div>
-            </div>
-
-            <div className="bg-[#0f2544] border border-slate-700/80 rounded-xl p-5">
-              <div className="text-xs font-medium text-slate-300">Realizado / Planejado</div>
-              <div className="mt-2 text-2xl lg:text-3xl font-display font-bold font-mono tabular-nums text-white">
-                {formatNumber(kpis.realizedTotal)}
-              </div>
-              <div className="mt-1.5 text-xs font-mono tabular-nums text-slate-400">
-                Meta: {formatNumber(kpis.plannedTotal)}
+              <div className="mt-1.5 text-xs font-mono text-slate-400">
+                Paradas: {fmtMin(f.downtimeMinutes)}
               </div>
             </div>
 
             <div className="bg-[#0f2544] border border-slate-700/80 rounded-xl p-5">
-              <div className="flex items-center justify-between text-xs font-medium text-slate-300">
-                <span>Atingimento da Meta</span>
-                {kpis.goalAttainmentPercent >= 95 ? (
-                  <TrendingUp className="w-4 h-4 text-emerald-400" />
-                ) : (
-                  <TrendingDown className="w-4 h-4 text-red-400" />
-                )}
+              <div className="text-xs font-medium text-slate-300">Desempenho</div>
+              <div className="mt-2 text-3xl lg:text-4xl font-display font-bold font-mono tabular-nums text-amber-300">
+                {fmtPct(f.performancePercent)}
               </div>
-              <div
-                className={`mt-2 text-3xl lg:text-4xl font-display font-bold font-mono tabular-nums ${
-                  kpis.goalAttainmentPercent >= 95 ? 'text-emerald-400' : 'text-red-400'
-                }`}
-              >
-                {kpis.goalAttainmentPercent.toFixed(1)}%
-              </div>
-              <div className="mt-1.5 text-xs text-slate-300">
-                {kpis.goalAttainmentPercent >= 95 ? 'Meta atingida' : 'Abaixo da meta (95%)'}
+              <div className="mt-1.5 text-xs font-mono text-slate-400">
+                Produzido: {fmtNum(f.producedQuantity)}
               </div>
             </div>
 
             <div className="bg-[#0f2544] border border-slate-700/80 rounded-xl p-5">
-              <div className="text-xs font-medium text-slate-300">Perdas / Refugos</div>
-              <div
-                className={`mt-2 text-3xl lg:text-4xl font-display font-bold font-mono tabular-nums ${
-                  kpis.lossPercent <= 3 ? 'text-emerald-400' : 'text-red-400'
-                }`}
-              >
-                {kpis.lossPercent.toFixed(2)}%
+              <div className="text-xs font-medium text-slate-300">Qualidade</div>
+              <div className="mt-2 text-3xl lg:text-4xl font-display font-bold font-mono tabular-nums text-emerald-400">
+                {fmtPct(f.qualityPercent)}
               </div>
-              <div className="mt-1.5 text-xs font-mono tabular-nums text-slate-400">
-                {formatNumber(kpis.lossesTotal)} perdidos
+              <div className="mt-1.5 text-xs font-mono text-red-300">
+                Perdas: {fmtNum(f.lossQuantity)}
               </div>
             </div>
 
             <div className="bg-[#0f2544] border border-slate-700/80 rounded-xl p-5">
-              <div className="flex items-center justify-between text-xs font-medium text-slate-300">
-                <span>Eficiência / Paradas</span>
-                <Clock className="w-4 h-4 text-slate-400" />
+              <div className="text-xs font-medium text-slate-300">Máquinas Operando</div>
+              <div className="mt-2 text-3xl lg:text-4xl font-display font-bold font-mono tabular-nums text-emerald-400">
+                {mc.operating} <span className="text-lg text-slate-400">/ {mc.total}</span>
               </div>
+              <div className="mt-1.5 text-xs font-mono text-slate-400">
+                Paradas: {mc.stopped} · Manut.: {mc.maintenance}
+              </div>
+            </div>
+
+            <div className="bg-[#0f2544] border border-slate-700/80 rounded-xl p-5">
+              <div className="text-xs font-medium text-slate-300">Atingimento Volume</div>
               <div className="mt-2 text-3xl lg:text-4xl font-display font-bold font-mono tabular-nums text-white">
-                {kpis.productiveEfficiencyPercent.toFixed(1)}%
+                {f.goalAttainmentPercent.toFixed(1)}%
               </div>
-              <div className="mt-1.5 text-xs font-mono tabular-nums text-amber-300">
-                Paradas: {formatMinutes(kpis.totalDowntimeMinutes)}
+              <div className="mt-1.5 text-xs font-mono text-slate-400">
+                Meta: {fmtNum(f.plannedQuantity)}
               </div>
             </div>
           </section>
         )}
 
-        {/* SLIDE 1: METAS, EVOLUÇÃO E DESEMPENHO POR SETOR */}
-        {charts && activeSlide === 0 && (
+        {/* SLIDE 1: IROG EVOLUÇÃO, SETORES & LINHAS */}
+        {overview && activeSlide === 0 && (
           <section className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5">
-            <div className="lg:col-span-7 bg-[#0f2544] border border-slate-700/80 rounded-xl p-6 flex flex-col">
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-display font-bold text-white">
-                    Produção Diária — Planejado vs Realizado
-                  </h2>
-                  <p className="text-xs text-slate-400">Acompanhamento de entregas ao longo dos dias</p>
-                </div>
-              </div>
-              <div className="flex-1 min-h-[300px]">
+            <div className="lg:col-span-6 bg-[#0f2544] border border-slate-700/80 rounded-xl p-6 flex flex-col">
+              <h2 className="text-lg font-display font-bold text-white mb-1">Evolução Diária do IROG (%)</h2>
+              <p className="text-xs text-slate-400 mb-4">IROG, Disponibilidade e Qualidade consolidados</p>
+              <div className="flex-1 min-h-[290px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={charts.dailyProduction}>
+                  <LineChart data={overview.charts.dailyIrog}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#1e3a5f" />
                     <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#cbd5e1' }} />
-                    <YAxis tick={{ fontSize: 12, fill: '#cbd5e1' }} />
+                    <YAxis domain={[0, 100]} tick={{ fontSize: 12, fill: '#cbd5e1' }} unit="%" />
                     <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#09172b',
-                        borderColor: '#334155',
-                        color: '#f8fafc',
-                      }}
+                      contentStyle={{ backgroundColor: '#09172b', borderColor: '#334155', color: '#f8fafc' }}
                     />
-                    <Legend wrapperStyle={{ fontSize: 13, color: '#e2e8f0' }} />
-                    <Area
-                      type="monotone"
-                      dataKey="planned"
-                      name="Planejado"
-                      stroke="#94a3b8"
-                      fill="#64748b"
-                      fillOpacity={0.25}
-                      strokeWidth={2}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="realized"
-                      name="Realizado"
-                      stroke="#3b82f6"
-                      fill="#2563eb"
-                      fillOpacity={0.35}
-                      strokeWidth={3}
-                    />
-                  </AreaChart>
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Line type="monotone" dataKey="irog" name="IROG %" stroke="#3b82f6" strokeWidth={3} />
+                    <Line type="monotone" dataKey="availability" name="Disp. %" stroke="#93c5fd" strokeWidth={2} />
+                    <Line type="monotone" dataKey="quality" name="Qualid. %" stroke="#34d399" strokeWidth={2} />
+                  </LineChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
-            <div className="lg:col-span-5 bg-[#0f2544] border border-slate-700/80 rounded-xl p-6 flex flex-col">
-              <div className="mb-5">
-                <h2 className="text-lg font-display font-bold text-white">Metas por Setor</h2>
-                <p className="text-xs text-slate-400">Progresso realizado frente ao volume planejado</p>
+            <div className="lg:col-span-6 bg-[#0f2544] border border-slate-700/80 rounded-xl p-6 flex flex-col gap-5">
+              <div>
+                <h2 className="text-lg font-display font-bold text-white">IROG por Setor &amp; Linha</h2>
+                <p className="text-xs text-slate-400">Desempenho frente às metas configuradas</p>
               </div>
-
-              <div className="space-y-5 flex-1">
-                {charts.bySector.map((sec) => {
-                  const pct = sec.planned > 0 ? (sec.realized / sec.planned) * 100 : 0;
-                  const barWidth = Math.min(100, Math.max(0, pct));
-                  const ok = pct >= 95;
+              <div className="space-y-4">
+                {overview.sectors.map((sec) => {
+                  const val = sec.irogPercent ?? 0;
+                  const target = sec.targetIrogPercent ?? 78;
                   return (
-                    <div key={sec.name} className="space-y-2">
-                      <div className="flex items-baseline justify-between gap-2">
+                    <div key={sec.id} className="space-y-1.5">
+                      <div className="flex items-baseline justify-between">
                         <span className="text-base font-semibold text-white">{sec.name}</span>
-                        <span className="font-mono tabular-nums text-sm text-slate-300">
-                          {formatNumber(sec.realized)} / {formatNumber(sec.planned)}{' '}
-                          <strong className={ok ? 'text-emerald-400 ml-2' : 'text-red-400 ml-2'}>
-                            ({pct.toFixed(1)}%)
+                        <span className="font-mono tabular-nums text-sm">
+                          <strong className={val >= target ? 'text-emerald-400' : 'text-amber-300'}>
+                            {fmtPct(sec.irogPercent)}
                           </strong>
+                          <span className="text-slate-400 ml-2">(Meta {target}%)</span>
                         </span>
                       </div>
-                      <div className="w-full h-3.5 bg-[#071324] rounded-full overflow-hidden border border-slate-700">
+                      <div className="w-full h-3 bg-[#071324] rounded-full overflow-hidden border border-slate-700">
                         <div
-                          className={`h-full rounded-full ${ok ? 'bg-emerald-500' : 'bg-blue-500'}`}
-                          style={{ width: `${barWidth}%` }}
+                          className={`h-full rounded-full ${val >= target ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                          style={{ width: `${Math.min(100, val)}%` }}
                         />
                       </div>
                     </div>
                   );
                 })}
               </div>
+
+              <div className="pt-3 border-t border-slate-700/70 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {overview.lines.slice(0, 6).map((l) => (
+                  <div key={l.id} className="p-3 rounded-lg bg-[#09172b] border border-slate-700/70">
+                    <div className="text-xs font-mono text-blue-300">{l.code}</div>
+                    <div className="text-xl font-mono font-bold text-white mt-0.5">{fmtPct(l.irogPercent)}</div>
+                    <div className="text-[11px] text-slate-400 truncate">{l.name}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </section>
         )}
 
-        {/* SLIDE 2: TURNOS, MOTIVOS DE PARADA E ÚLTIMOS APONTAMENTOS */}
-        {charts && activeSlide === 1 && (
+        {/* SLIDE 2: MÁQUINAS, PARADAS E ÚLTIMOS APONTAMENTOS */}
+        {overview && activeSlide === 1 && (
           <section className="flex-1 flex flex-col gap-5">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               <div className="bg-[#0f2544] border border-slate-700/80 rounded-xl p-5">
-                <h2 className="text-base font-display font-bold text-white mb-3">Produção por Turno</h2>
-                <div className="h-56">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={charts.byShift}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e3a5f" />
-                      <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#cbd5e1' }} />
-                      <YAxis tick={{ fontSize: 12, fill: '#cbd5e1' }} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#09172b',
-                          borderColor: '#334155',
-                          color: '#f8fafc',
-                        }}
-                      />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Bar dataKey="planned" name="Planejado" fill="#64748b" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="realized" name="Realizado" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                <h2 className="text-base font-display font-bold text-white mb-3">
+                  Situação das Máquinas (IROG Individual)
+                </h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {overview.machines.slice(0, 9).map((m) => (
+                    <div key={m.id} className="p-3 rounded-lg bg-[#09172b] border border-slate-700/80">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-mono font-bold text-blue-300">{m.code}</span>
+                        <span
+                          className={
+                            m.machineStatus === 'operating'
+                              ? 'text-emerald-400'
+                              : m.machineStatus === 'stopped'
+                              ? 'text-red-400'
+                              : 'text-amber-300'
+                          }
+                        >
+                          {m.machineStatus === 'operating' ? 'Operando' : m.machineStatus === 'stopped' ? 'Parada' : 'Manut.'}
+                        </span>
+                      </div>
+                      <div className="text-xl font-mono font-bold text-white mt-1">{fmtPct(m.irogPercent)}</div>
+                      <div className="text-[11px] text-slate-400 truncate">{m.name}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -487,47 +483,34 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
                 <h2 className="text-base font-display font-bold text-white mb-3">
                   Principais Motivos de Parada (min)
                 </h2>
-                {charts.downtimeReasons.length === 0 ? (
-                  <div className="h-56 flex items-center justify-center text-sm text-slate-400">
-                    Nenhuma parada registrada no escopo selecionado.
-                  </div>
-                ) : (
-                  <div className="h-56">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={charts.downtimeReasons.slice(0, 5)} layout="vertical" margin={{ left: 20 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e3a5f" />
-                        <XAxis type="number" tick={{ fontSize: 12, fill: '#cbd5e1' }} />
-                        <YAxis dataKey="reason" type="category" width={160} tick={{ fontSize: 11, fill: '#e2e8f0' }} />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: '#09172b',
-                            borderColor: '#334155',
-                            color: '#f8fafc',
-                          }}
-                        />
-                        <Bar dataKey="minutes" name="Minutos" fill="#ef4444" radius={[0, 4, 4, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
+                <div className="h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={overview.charts.downtimeByReason.slice(0, 5)} layout="vertical" margin={{ left: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1e3a5f" />
+                      <XAxis type="number" tick={{ fontSize: 12, fill: '#cbd5e1' }} />
+                      <YAxis dataKey="reason" type="category" width={160} tick={{ fontSize: 11, fill: '#e2e8f0' }} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#09172b', borderColor: '#334155', color: '#f8fafc' }}
+                      />
+                      <Bar dataKey="minutes" name="Minutos" fill="#ef4444" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
 
             <div className="bg-[#0f2544] border border-slate-700/80 rounded-xl overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-slate-700/80 flex items-center justify-between">
-                <h2 className="text-base font-display font-bold text-white">
-                  Últimos Apontamentos da Produção
-                </h2>
-                <span className="text-xs text-slate-400">Atualização contínua do chão de fábrica</span>
+              <div className="px-5 py-3 border-b border-slate-700/80 flex items-center justify-between">
+                <h2 className="text-base font-display font-bold text-white">Últimos Apontamentos</h2>
+                <span className="text-xs text-slate-400">Atualização contínua</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left">
                   <thead className="bg-[#09172b] text-xs text-slate-300 border-b border-slate-700/80">
                     <tr>
                       <th className="px-4 py-2.5">Data / Turno</th>
-                      <th className="px-4 py-2.5">Setor / Linha</th>
+                      <th className="px-4 py-2.5">Setor / Máquina</th>
                       <th className="px-4 py-2.5">Produto</th>
-                      <th className="px-4 py-2.5">Responsável</th>
                       <th className="px-4 py-2.5 text-right">Realizado</th>
                       <th className="px-4 py-2.5 text-right">Perdas</th>
                       <th className="px-4 py-2.5 text-right">Parada</th>
@@ -536,19 +519,18 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
                   <tbody className="divide-y divide-slate-700/60">
                     {recentRecords.map((r) => (
                       <tr key={r.id}>
-                        <td className="px-4 py-2.5 font-mono tabular-nums text-slate-200 whitespace-nowrap">
+                        <td className="px-4 py-2.5 font-mono tabular-nums text-slate-200">
                           {r.production_date} · {r.shift_name}
                         </td>
                         <td className="px-4 py-2.5 text-slate-100">
-                          {r.sector_name} · <span className="text-slate-300">{r.line_name}</span>
+                          {r.sector_name} · {r.machine_name || r.line_name}
                         </td>
                         <td className="px-4 py-2.5 text-white font-medium">{r.product_name}</td>
-                        <td className="px-4 py-2.5 text-slate-300">{r.operator_name}</td>
                         <td className="px-4 py-2.5 text-right font-mono tabular-nums font-bold text-blue-300">
-                          {formatNumber(r.produced_quantity)} {r.unit_of_measure}
+                          {fmtNum(r.produced_quantity)} {r.unit_of_measure}
                         </td>
                         <td className="px-4 py-2.5 text-right font-mono tabular-nums text-red-300">
-                          {formatNumber(r.loss_quantity)} {r.unit_of_measure}
+                          {fmtNum(r.loss_quantity)} {r.unit_of_measure}
                         </td>
                         <td className="px-4 py-2.5 text-right font-mono tabular-nums text-amber-300">
                           {r.has_downtime ? `${r.total_downtime_minutes} min` : '—'}
@@ -563,11 +545,10 @@ export function TvProjectionView({ catalog, onExit }: TvProjectionViewProps) {
         )}
       </main>
 
-      {/* Quiet Status Footer */}
       <footer className="px-6 py-2.5 bg-[#09172b] border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
         <span>
-          novo.forteflex · Gestão à Vista
-          {kpis?.demoRecordsCount ? ` · Inclui ${kpis.demoRecordsCount} registros demonstrativos` : ''}
+          novo.forteflex · IROG ForteFlex — Gestão à Vista
+          {overview?.demoRecordsCount ? ` · Inclui ${overview.demoRecordsCount} registros demonstrativos` : ''}
         </span>
         <span className="font-mono tabular-nums">
           {lastUpdated ? `Última atualização: ${lastUpdated.toLocaleTimeString('pt-BR')}` : 'Carregando...'}

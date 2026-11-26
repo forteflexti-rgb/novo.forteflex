@@ -348,7 +348,11 @@ export const api = {
 
       const records: ProductionRecord[] = (data || []).map((row: any) => ({
         ...row,
-        operator_name: row.operator?.full_name || '',
+        // Carga do Iniflex: o RPCP622 não informa o operador; operator_id é só o responsável pela carga.
+        operator_name:
+          row.source === 'iniflex_report' || row.source === 'iniflex_api'
+            ? 'Iniflex (operador não informado)'
+            : row.operator?.full_name || '',
         sector_name: row.sector?.name || '',
         line_name: row.line?.name || '',
         product_name: row.product?.name || '',

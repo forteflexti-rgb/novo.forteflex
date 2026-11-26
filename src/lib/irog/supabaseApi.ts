@@ -173,7 +173,7 @@ export async function getDowntimes(filters?: { machineId?: string; status?: 'ope
         sector_id: sector, sector_name: sector ? sName.get(sector) : null, line_id: line, line_name: line ? lName.get(line) : null,
         shift_id: d.shift_id, shift_name: d.shift?.name ?? 'Turno não informado', reason_id: d.reason_id, reason: d.reason_ref?.name ?? d.reason,
         category: d.reason_ref?.category ?? (d.reason_id ? null : 'Sem classificação'), is_planned: planned, counts_for_availability: !planned,
-        duration_minutes: d.duration_minutes, start_at: d.started_at, end_at: d.ended_at, status: d.status, description: d.description,
+        duration_minutes: d.duration_minutes, production_date: d.production_date, start_at: d.started_at, end_at: d.ended_at, status: d.status, description: d.description,
         recorded_by: d.recorded_by, recorded_by_name: d.recorder?.full_name ?? (d.source === 'iniflex_report' ? 'Iniflex (RPCP019)' : null), created_at: d.created_at,
       } satisfies DowntimeEvent;
     }),
