@@ -17,6 +17,16 @@ const DEFAULT_PERMISSIONS: UserPermissions = {
   can_export_own_records: false,
 };
 
+/** Nomes dos perfis aceitos pelo Supabase (profiles_role_check). */
+const ROLE_LABELS: Record<string, string> = {
+  admin: 'Administrador',
+  industrial_manager: 'Gestor Industrial',
+  sector_manager: 'Gestor de Setor',
+  director: 'Diretoria',
+  operator: 'Operador de Produção',
+  ti: 'TI',
+};
+
 export function AdminUsersView({ catalog, onCatalogUpdated }: AdminUsersViewProps) {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -198,7 +208,7 @@ export function AdminUsersView({ catalog, onCatalogUpdated }: AdminUsersViewProp
                         </div>
                       </td>
                       <td className="px-4 py-3 text-slate-800 font-medium">
-                        {u.role === 'admin' ? 'Administrador' : 'Operador de Produção'}
+                        {ROLE_LABELS[u.role] ?? u.role}
                       </td>
                       <td className="px-4 py-3 text-slate-600">{u.sector_name || 'Geral'}</td>
                       <td className="px-4 py-3 text-xs text-slate-600">
@@ -316,6 +326,10 @@ export function AdminUsersView({ catalog, onCatalogUpdated }: AdminUsersViewProp
                     className="w-full min-h-[42px] px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white"
                   >
                     <option value="operator">Operador de Produção</option>
+                    <option value="sector_manager">Gestor de Setor</option>
+                    <option value="industrial_manager">Gestor Industrial</option>
+                    <option value="director">Diretoria</option>
+                    <option value="ti">TI</option>
                     <option value="admin">Administrador da Empresa</option>
                   </select>
                 </div>

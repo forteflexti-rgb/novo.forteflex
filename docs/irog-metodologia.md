@@ -1,6 +1,6 @@
 # Metodologia do IROG FORTEFLEX
 
-Versão do cálculo: `irog-1.0.0` (código: `src/lib/irog/engine.ts`, testes: `src/lib/irog/engine.test.ts`).
+Versão do cálculo: `irog-1.1.0` (código: `src/lib/irog/engine.ts`, testes: `src/lib/irog/engine.test.ts`).
 
 ## Grão do cálculo
 
@@ -23,6 +23,21 @@ O IROG é calculado por **recurso × dia × turno**. Todo indicador de linha, se
 - **Performance** = tempo padrão produzido ÷ tempo de operação
 - **Qualidade** = tempo padrão aprovado ÷ tempo padrão produzido
 - **IROG** = Disponibilidade × Performance × Qualidade = tempo padrão aprovado ÷ tempo programado
+
+### Regras adotadas para os dados do Iniflex (decisão de 26/11/2026)
+
+- **Qualidade por peso.** O RPCP019 registra perdas só em kg, por recurso e dia, enquanto a produção
+  vem em mt, mil ou kg. A qualidade é (kg produzido − kg perdido) ÷ kg produzido, usando o peso
+  líquido de cada apontamento. O tempo padrão aprovado = tempo padrão produzido × qualidade.
+- **Tempo de operação observado.** Quando há horários de apontamento, o tempo de operação é limitado
+  à **união** dos horários apontados no dia: apontamentos sobrepostos no mesmo recurso não contam o
+  tempo duas vezes. Tempo programado sem apontamento nem parada registrada vira **parada não
+  apontada** (conta contra a disponibilidade) e aparece como aviso.
+- **Duração impossível.** Apontamento com duração negativa ou acima de 24 h deixa o grão pendente
+  (`APONTAMENTO_DURACAO_INVALIDA`) até ser corrigido no ERP. Ex.: OP 11412, recurso 501, 27/10/2026,
+  122 dias.
+- **Grão recurso × dia.** Cerca de 48% dos apontamentos do RPCP622 não informam o turno (os recursos
+  201 e 301 nunca informam), então o IROG por turno fica indisponível até o turno ser apontado.
 
 Todos os componentes são exibidos em percentual.
 
@@ -63,6 +78,8 @@ que foi calculada) e os motivos das pendências.
 | `UNIDADE_INCOMPATIVEL` | Unidade do apontamento difere da unidade do padrão | Padrão na unidade correta |
 | `PERDA_SEM_PRODUCAO_CORRESPONDENTE` | Perda sem produção do mesmo produto/unidade | Vincular a perda ao produto |
 | `PERDA_MAIOR_QUE_PRODUCAO` | Perda maior que a produção (possível duplicidade) | Conferir os registros de origem |
+| `APONTAMENTO_DURACAO_INVALIDA` | Apontamento com duração negativa ou acima de 24 h | Corrigir início/fim no ERP |
+| `PESO_AUSENTE` | Qualidade por peso sem peso líquido no apontamento | Peso líquido no apontamento |
 | `VALOR_INVALIDO` | Quantidade, duração ou padrão negativo ou não numérico | Corrigir a origem |
 
 Cada pendência informa o motivo, o cadastro necessário e quantos registros foram afetados, com os ids.
@@ -72,6 +89,8 @@ Cada pendência informa o motivo, o cadastro necessário e quantos registros for
 - `PERFORMANCE_ACIMA_100`: o valor é mantido, sem limite de 100%. Indica que o padrão pode estar
   subestimado e precisa ser revisto pela engenharia.
 - `SEM_PRODUCAO`: grão com tempo programado e nenhuma produção.
+- `PARADA_NAO_APONTADA`: tempo programado sem apontamento nem parada registrada.
+- `PRODUCAO_FORA_DO_CALENDARIO`: horários apontados além do tempo programado.
 
 ## Regras de dados
 

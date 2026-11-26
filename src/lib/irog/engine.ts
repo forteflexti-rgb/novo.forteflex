@@ -17,7 +17,7 @@
  * sem misturar grandezas. Dado ausente NUNCA vira zero: o grão fica "pending" com o motivo.
  */
 
-export const IROG_CALC_VERSION = 'irog-1.0.0';
+export const IROG_CALC_VERSION = 'irog-1.1.0';
 
 export type StandardType = 'rate_per_hour' | 'cycle_seconds';
 
@@ -35,6 +35,11 @@ export interface ProductionFact {
   stepId: string | null;
   quantity: number;
   unit: string;
+  /** Peso líquido (kg) — base da qualidade por peso. */
+  weightKg?: number | null;
+  /** Início e fim do apontamento (ms desde epoch) — base do tempo de operação observado. */
+  startMs?: number | null;
+  endMs?: number | null;
 }
 
 export interface LossFact {
@@ -43,6 +48,34 @@ export interface LossFact {
   stepId: string | null;
   quantity: number;
   unit: string;
+}
+
+/** Duração máxima aceita para um único apontamento (acima disso é erro de digitação/fechamento). */
+export const MAX_EVENT_MINUTES = 24 * 60;
+
+/**
+ * Minutos cobertos pela UNIÃO dos intervalos, recortados na janela do grão.
+ * Apontamentos sobrepostos no mesmo recurso não contam o tempo duas vezes.
+ */
+export function unionMinutes(intervals: Array<[number, number]>, windowStart: number, windowEnd: number): number {
+  const clipped = intervals
+    .map(([a, b]) => [Math.max(a, windowStart), Math.min(b, windowEnd)] as [number, number])
+    .filter(([a, b]) => b > a)
+    .sort((x, y) => x[0] - y[0]);
+  let total = 0;
+  let curStart = -Infinity;
+  let curEnd = -Infinity;
+  for (const [a, b] of clipped) {
+    if (a > curEnd) {
+      if (curEnd > curStart) total += curEnd - curStart;
+      curStart = a;
+      curEnd = b;
+    } else if (b > curEnd) {
+      curEnd = b;
+    }
+  }
+  if (curEnd > curStart) total += curEnd - curStart;
+  return total / 60000;
 }
 
 export interface DowntimeFact {
@@ -62,6 +95,16 @@ export interface IrogGrainInput {
   losses: LossFact[];
   downtime: DowntimeFact[];
   standards: ResourceStandard[];
+  /**
+   * Janela do grão (ms). Quando informada, o tempo de operação passa a ser limitado pela união dos
+   * horários apontados: tempo programado sem nenhum apontamento é tratado como parada não apontada.
+   */
+  window?: { startMs: number; endMs: number } | null;
+  /**
+   * Base da qualidade. 'weight' (padrão ForteFlex): (kg produzido − kg perdido) ÷ kg produzido,
+   * porque o Iniflex registra as perdas só em kg. 'quantity': perdas convertidas pelo padrão produtivo.
+   */
+  qualityBasis?: 'weight' | 'quantity';
 }
 
 export type PendingCode =
@@ -73,6 +116,8 @@ export type PendingCode =
   | 'UNIDADE_INCOMPATIVEL'
   | 'PERDA_SEM_PRODUCAO_CORRESPONDENTE'
   | 'PERDA_MAIOR_QUE_PRODUCAO'
+  | 'APONTAMENTO_DURACAO_INVALIDA'
+  | 'PESO_AUSENTE'
   | 'VALOR_INVALIDO';
 
 export interface PendingReason {
@@ -84,7 +129,7 @@ export interface PendingReason {
   recordIds: string[];
 }
 
-export type WarningCode = 'PERFORMANCE_ACIMA_100' | 'SEM_PRODUCAO';
+export type WarningCode = 'PERFORMANCE_ACIMA_100' | 'SEM_PRODUCAO' | 'PRODUCAO_FORA_DO_CALENDARIO' | 'PARADA_NAO_APONTADA';
 
 export interface IrogWarning {
   code: WarningCode;
@@ -98,6 +143,12 @@ export interface IrogTotals {
   unplannedStopMinutes: number;
   scheduledMinutes: number | null;
   operatingMinutes: number | null;
+  /** União dos horários apontados dentro da janela (null = sem janela/horários). */
+  observedRunMinutes: number | null;
+  /** Tempo programado sem apontamento nem parada registrada (tratado como parada não programada). */
+  unrecordedStopMinutes: number;
+  producedWeightKg: number | null;
+  lossWeightKg: number | null;
   idealMinutes: number | null; // tempo padrão de tudo que foi produzido
   idealGoodMinutes: number | null; // tempo padrão do que foi aprovado
 }
@@ -235,6 +286,48 @@ export function calculateIrogGrain(input: IrogGrainInput): IrogResult {
     }
   }
 
+  // ---- Tempo de operação observado (união dos horários apontados) ----
+  let observedRunMinutes: number | null = null;
+  let unrecordedStopMinutes = 0;
+  if (input.window) {
+    const intervals: Array<[number, number]> = [];
+    const badDuration: string[] = [];
+    let withTimes = 0;
+    for (const p of input.production) {
+      if (!isValidNumber(p.startMs) || !isValidNumber(p.endMs)) continue;
+      withTimes++;
+      const minutes = (p.endMs - p.startMs) / 60000;
+      if (minutes < 0 || minutes > MAX_EVENT_MINUTES) badDuration.push(p.id);
+      else intervals.push([p.startMs, p.endMs]);
+    }
+    if (badDuration.length > 0) {
+      addPending(pending, {
+        code: 'APONTAMENTO_DURACAO_INVALIDA',
+        message: `Apontamento com duração negativa ou acima de ${MAX_EVENT_MINUTES / 60} h.`,
+        required: 'Corrigir início/fim do apontamento no ERP',
+        recordIds: badDuration,
+      });
+    }
+    if (withTimes > 0 || input.production.length === 0) {
+      observedRunMinutes = unionMinutes(intervals, input.window.startMs, input.window.endMs);
+      if (operatingMinutes !== null && scheduledMinutes !== null && scheduledMinutes > 0 && operatingMinutes >= 0) {
+        if (observedRunMinutes < operatingMinutes) {
+          unrecordedStopMinutes = operatingMinutes - observedRunMinutes;
+          operatingMinutes = observedRunMinutes;
+          warnings.push({
+            code: 'PARADA_NAO_APONTADA',
+            message: `${Math.round(unrecordedStopMinutes)} min programados sem apontamento nem parada registrada.`,
+          });
+        } else if (observedRunMinutes > operatingMinutes + 1) {
+          warnings.push({
+            code: 'PRODUCAO_FORA_DO_CALENDARIO',
+            message: `${Math.round(observedRunMinutes - operatingMinutes)} min apontados além do tempo programado.`,
+          });
+        }
+      }
+    }
+  }
+
   // ---- Tempo padrão (performance) ----
   let idealMinutes = 0;
   const stdByKey = new Map<string, ResourceStandard | null>();
@@ -277,9 +370,46 @@ export function calculateIrogGrain(input: IrogGrainInput): IrogResult {
     idealMinutes += idealMinutesFor(p.quantity, std);
   }
 
-  // ---- Qualidade: perdas convertidas em minutos padrão ----
+  // ---- Qualidade ----
+  const basis = input.qualityBasis ?? 'quantity';
   let lossIdealMinutes = 0;
-  for (const l of input.losses) {
+  let producedWeightKg: number | null = null;
+  let lossWeightKg: number | null = null;
+  let weightQuality: number | null = null;
+
+  if (basis === 'weight') {
+    const noWeight = input.production.filter((p) => !isValidNumber(p.weightKg) || (p.weightKg as number) < 0).map((p) => p.id);
+    if (noWeight.length > 0) {
+      addPending(pending, {
+        code: 'PESO_AUSENTE',
+        message: 'Apontamento sem peso líquido: a qualidade por peso não pode ser calculada.',
+        required: 'Peso líquido (kg) no apontamento',
+        recordIds: noWeight,
+      });
+    }
+    const nonKgLoss = input.losses.filter((l) => norm(l.unit) !== 'kg').map((l) => l.id);
+    if (nonKgLoss.length > 0) {
+      addPending(pending, {
+        code: 'UNIDADE_INCOMPATIVEL',
+        message: 'Qualidade por peso exige perdas em kg.',
+        required: 'Perda informada em kg',
+        recordIds: nonKgLoss,
+      });
+    }
+    producedWeightKg = input.production.reduce((s, p) => s + (isValidNumber(p.weightKg) ? p.weightKg : 0), 0);
+    lossWeightKg = input.losses.filter((l) => norm(l.unit) === 'kg' && isValidNumber(l.quantity)).reduce((s, l) => s + l.quantity, 0);
+    if (lossWeightKg > producedWeightKg + 1e-9) {
+      addPending(pending, {
+        code: 'PERDA_MAIOR_QUE_PRODUCAO',
+        message: `Perda (${lossWeightKg} kg) maior que a produção (${producedWeightKg} kg).`,
+        required: 'Conferir se a perda já está incluída ou duplicada na produção',
+        recordIds: input.losses.map((l) => l.id),
+      });
+    }
+    weightQuality = producedWeightKg > 0 ? (producedWeightKg - lossWeightKg) / producedWeightKg : null;
+  }
+
+  for (const l of basis === 'quantity' ? input.losses : []) {
     if (!isValidNumber(l.quantity) || l.quantity < 0) continue;
     const matching = input.production.filter(
       (p) => norm(p.unit) === norm(l.unit) && (l.productId === null || p.productId === l.productId),
@@ -319,7 +449,7 @@ export function calculateIrogGrain(input: IrogGrainInput): IrogResult {
     lossIdealMinutes += idealMinutesFor(l.quantity, std);
   }
 
-  for (const [unit, loss] of Object.entries(lossByUnit)) {
+  for (const [unit, loss] of basis === 'quantity' ? Object.entries(lossByUnit) : []) {
     if (loss > (producedByUnit[unit] ?? 0) + 1e-9) {
       addPending(pending, {
         code: 'PERDA_MAIOR_QUE_PRODUCAO',
@@ -334,13 +464,18 @@ export function calculateIrogGrain(input: IrogGrainInput): IrogResult {
     warnings.push({ code: 'SEM_PRODUCAO', message: 'Nenhuma produção apontada no grão.' });
   }
 
-  const idealGoodMinutes = idealMinutes - lossIdealMinutes;
+  const idealGoodMinutes =
+    basis === 'weight' ? (weightQuality === null ? 0 : idealMinutes * weightQuality) : idealMinutes - lossIdealMinutes;
   const totals: IrogTotals = {
     calendarMinutes: input.calendarMinutes,
     plannedStopMinutes,
     unplannedStopMinutes,
     scheduledMinutes,
     operatingMinutes,
+    observedRunMinutes,
+    unrecordedStopMinutes,
+    producedWeightKg,
+    lossWeightKg,
     idealMinutes: pending.length === 0 ? idealMinutes : null,
     idealGoodMinutes: pending.length === 0 ? idealGoodMinutes : null,
   };

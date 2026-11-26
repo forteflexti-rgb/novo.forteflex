@@ -18,6 +18,19 @@ import type {
   ServiceOrderNote,
 } from '../types';
 
+import * as irogApi from './irog/supabaseApi';
+
+const EMPTY_IROG_CATALOG = {
+  machines: [],
+  stages: [],
+  cycleStandards: [],
+  orders: [],
+  calendars: [],
+  downtimeReasons: [],
+  lossReasons: [],
+  irogGoals: [],
+} satisfies Partial<CatalogData>;
+
 const TOKEN_KEY = 'novo_forteflex_token';
 
 export function getStoredToken(): string | null {
@@ -266,18 +279,41 @@ export const api = {
         supabase.from('profiles').select('id, full_name, username, role, sector_id, is_active').order('full_name'),
       ]);
 
+      const sectors = (sectorsRes.data || []) as Sector[];
+      const lines = (linesRes.data || []) as ProductionLine[];
+      const products = (productsRes.data || []) as Product[];
+      const irog = await irogApi.loadIrogCatalog({
+        sectors: new Map(sectors.map((s) => [s.id, s.name])),
+        lines: new Map(lines.map((l) => [l.id, l.name])),
+        products: new Map(products.map((p) => [p.id, { name: p.name, sku: p.sku }])),
+      });
+
       return {
-        sectors: (sectorsRes.data || []) as Sector[],
-        lines: (linesRes.data || []) as ProductionLine[],
-        products: (productsRes.data || []) as Product[],
+        sectors,
+        lines,
+        products,
         shifts: (shiftsRes.data || []) as Shift[],
-        goals: (goalsRes.data || []) as ProductionGoal[],
+        goals: ((goalsRes.data || []) as any[]).filter((g) => (g.metric ?? 'quantity') === 'quantity') as ProductionGoal[],
         operators: (operatorsRes.data || []) as any[],
+        ...irog,
       };
     }
 
-    return request<CatalogData>('/api/catalog');
+    const local = await request<CatalogData>('/api/catalog');
+    return { ...EMPTY_IROG_CATALOG, ...local };
   },
+
+  // IROG, paradas, perdas, alertas e auditoria (Supabase) — ver src/lib/irog/supabaseApi.ts
+  getIrogOverview: (filters?: Partial<DashboardFilters>) => irogApi.getIrogOverview(filters),
+  getDowntimes: (filters?: { machineId?: string; status?: 'open' | 'closed' }) => irogApi.getDowntimes(filters),
+  createDowntime: irogApi.createDowntime,
+  closeDowntime: irogApi.closeDowntime,
+  getLosses: (filters?: { includeDemo?: boolean }) => irogApi.getLosses(filters),
+  createLoss: irogApi.createLoss,
+  getAlerts: (includeDemo = true) => irogApi.getAlerts(includeDemo),
+  createAlertRule: irogApi.createAlertRule,
+  updateAlertRule: irogApi.updateAlertRule,
+  getAuditLogs: () => irogApi.getAuditLogs(),
 
   getProductionRecords: async (filters?: Partial<DashboardFilters>) => {
     if (isSupabaseConfigured && supabase) {
@@ -657,7 +693,7 @@ export const api = {
     email: string;
     full_name: string;
     password: string;
-    role: 'admin' | 'operator';
+    role: UserProfile['role'];
     sector_id?: string | null;
     permissions?: UserProfile['permissions'];
   }) => {

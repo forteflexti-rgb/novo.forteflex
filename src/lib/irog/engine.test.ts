@@ -1,6 +1,63 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateIrogGrain, consolidateIrog, type IrogGrainInput } from './engine.ts';
+import { calculateIrogGrain, consolidateIrog, unionMinutes, type IrogGrainInput } from './engine.ts';
+
+const H = 3600000;
+const T0 = Date.UTC(2026, 9, 1, 9, 0); // 06:00 em Brasília
+
+test('união de intervalos não conta sobreposição duas vezes e recorta a janela', () => {
+  assert.equal(unionMinutes([[T0, T0 + 2 * H], [T0 + H, T0 + 3 * H]], T0, T0 + 8 * H), 180);
+  assert.equal(unionMinutes([[T0 - H, T0 + H]], T0, T0 + 8 * H), 60);
+  assert.equal(unionMinutes([], T0, T0 + H), 0);
+});
+
+const timed = (): IrogGrainInput => ({
+  resourceId: 'r-101',
+  date: '2026-10-01',
+  shiftId: 'T1',
+  calendarMinutes: 480,
+  window: { startMs: T0, endMs: T0 + 8 * H },
+  qualityBasis: 'weight',
+  production: [
+    { id: 'p1', productId: 'A', stepId: '10', quantity: 300, unit: 'mt', weightKg: 100, startMs: T0, endMs: T0 + 3 * H },
+    { id: 'p2', productId: 'A', stepId: '10', quantity: 300, unit: 'mt', weightKg: 100, startMs: T0 + 2 * H, endMs: T0 + 5 * H },
+  ],
+  losses: [{ id: 'l1', productId: null, stepId: null, quantity: 10, unit: 'kg' }],
+  downtime: [],
+  standards: [{ productId: 'A', stepId: null, type: 'rate_per_hour', value: 150, unit: 'mt' }],
+});
+
+test('tempo sem apontamento vira parada não apontada; sobreposição não infla a operação', () => {
+  const r = calculateIrogGrain(timed());
+  assert.equal(r.status, 'ok');
+  assert.equal(r.totals.observedRunMinutes, 300); // 06h–11h, não 360
+  assert.equal(r.totals.operatingMinutes, 300);
+  assert.equal(r.totals.unrecordedStopMinutes, 180);
+  close(r.availability, 300 / 480);
+  close(r.performance, 240 / 300); // 600 mt a 150 mt/h = 240 min padrão
+  assert.ok(r.warnings.some((w) => w.code === 'PARADA_NAO_APONTADA'));
+});
+
+test('qualidade por peso: perdas em kg contra produção em metros', () => {
+  const r = calculateIrogGrain(timed());
+  close(r.quality, 190 / 200);
+  close(r.irog, (240 * 0.95) / 480);
+});
+
+test('apontamento com duração impossível fica pendente', () => {
+  const input = timed();
+  input.production[1].endMs = T0 + 122 * 24 * H;
+  const r = calculateIrogGrain(input);
+  assert.equal(r.status, 'pending');
+  const p = r.pending.find((x) => x.code === 'APONTAMENTO_DURACAO_INVALIDA');
+  assert.deepEqual(p?.recordIds, ['p2']);
+});
+
+test('qualidade por peso exige peso no apontamento', () => {
+  const input = timed();
+  input.production[0].weightKg = null;
+  assert.ok(calculateIrogGrain(input).pending.some((p) => p.code === 'PESO_AUSENTE'));
+});
 
 const close = (a: number | null, b: number, msg?: string) => {
   assert.ok(a !== null, msg ?? 'valor nulo');

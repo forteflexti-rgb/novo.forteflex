@@ -13,8 +13,14 @@ import {
   X,
   Tv,
   LifeBuoy,
+  Gauge,
+  Factory,
+  PauseCircle,
+  PackageX,
+  BellRing,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { canViewIrog, isAdminUser } from '../lib/access';
 import { BrandMark } from './BrandMark';
 import { usePortalConfig, DEFAULT_PORTAL_CONFIG } from '../lib/portalConfig';
 
@@ -29,7 +35,12 @@ export type AppRoute =
   | 'admin-catalog'
   | 'admin-imports'
   | 'admin-settings'
-  | 'admin-tv';
+  | 'admin-tv'
+  | 'irog-factory'
+  | 'irog-drilldown'
+  | 'downtimes'
+  | 'losses'
+  | 'admin-alerts';
 
 interface NavItem {
   id: AppRoute;
@@ -55,6 +66,11 @@ const ROUTE_TITLES: Record<AppRoute, { section: string; title: string }> = {
   'admin-imports': { section: 'Integrações', title: 'Importação e ERP Iniflex' },
   'admin-settings': { section: 'Sistema', title: 'Configurações Gerais' },
   'admin-tv': { section: 'Gestão à Vista', title: 'Modo TV / Projeção' },
+  'irog-factory': { section: 'IROG ForteFlex', title: 'Visão Geral da Fábrica' },
+  'irog-drilldown': { section: 'IROG ForteFlex', title: 'Setor, Linha e Máquina' },
+  downtimes: { section: 'Chão de Fábrica', title: 'Gestão de Paradas' },
+  losses: { section: 'Chão de Fábrica', title: 'Perdas e Qualidade' },
+  'admin-alerts': { section: 'IROG ForteFlex', title: 'Alertas e Auditoria' },
 };
 
 export function LayoutShell({ activeRoute, onNavigate, children }: LayoutShellProps) {
@@ -65,11 +81,24 @@ export function LayoutShell({ activeRoute, onNavigate, children }: LayoutShellPr
 
   if (!user) return null;
 
-  const isAdmin = user.role === 'admin' || (user.role as any) === 'ti';
+  const isAdmin = isAdminUser(user);
+  const irog = canViewIrog(user);
+
+  const irogItems: NavItem[] = [
+    { id: 'irog-factory', label: 'IROG — Visão da Fábrica', icon: Gauge },
+    { id: 'irog-drilldown', label: 'IROG — Setor, Linha e Máquina', icon: Factory },
+  ];
+  const floorItems: NavItem[] = [
+    { id: 'downtimes', label: 'Paradas', icon: PauseCircle },
+    { id: 'losses', label: 'Perdas e Qualidade', icon: PackageX },
+  ];
 
   const navItems: NavItem[] = isAdmin
     ? [
+        ...irogItems,
         { id: 'admin-dashboard', label: 'Dashboard Gerencial', icon: BarChart3 },
+        ...floorItems,
+        { id: 'admin-alerts', label: 'Alertas e Auditoria', icon: BellRing },
         { id: 'service-orders', label: 'Ordens de Serviço (OS)', icon: LifeBuoy },
         { id: 'admin-tv', label: 'Modo TV / Projeção', icon: Tv },
         { id: 'admin-records', label: 'Registros de Produção', icon: ClipboardList },
@@ -81,7 +110,9 @@ export function LayoutShell({ activeRoute, onNavigate, children }: LayoutShellPr
         { id: 'admin-settings', label: 'Configurações Gerais', icon: SlidersHorizontal },
       ]
     : [
+        ...(irog ? [...irogItems, { id: 'admin-alerts' as AppRoute, label: 'Alertas e Auditoria', icon: BellRing }] : []),
         { id: 'production-entry', label: 'Registrar Produção', icon: ClipboardPlus },
+        ...floorItems,
         { id: 'service-orders', label: 'Chamados TI / Abrir OS', icon: LifeBuoy },
         ...(user.permissions.can_view_own_records || user.permissions.can_view_sector_records
           ? [{ id: 'my-records' as AppRoute, label: 'Meus Registros', icon: ClipboardList }]
