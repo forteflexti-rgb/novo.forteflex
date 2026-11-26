@@ -21,7 +21,7 @@ export function BrandMark({ variant = 'dark', size = 'md' }: BrandMarkProps) {
         <div className="bg-white/95 rounded-lg px-2.5 py-1.5 shadow-sm inline-flex items-center justify-center border border-white/20">
           <img
             src={logoSrc}
-            alt={config.companyName || 'Forteflex'}
+            alt={safeConfig.companyName || 'Forteflex'}
             className={`${imgHeight} max-w-[195px] object-contain`}
           />
         </div>
@@ -33,7 +33,7 @@ export function BrandMark({ variant = 'dark', size = 'md' }: BrandMarkProps) {
     <div className="inline-flex items-center gap-2 select-none">
       <img
         src={logoSrc}
-        alt={config.companyName || 'Forteflex'}
+        alt={safeConfig.companyName || 'Forteflex'}
         className={`${imgHeight} max-w-[210px] object-contain`}
       />
     </div>

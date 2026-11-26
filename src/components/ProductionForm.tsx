@@ -55,6 +55,8 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
 
   const [notes, setNotes] = useState('');
   const [additionalNotes, setAdditionalNotes] = useState('');
+  const [opNumber, setOpNumber] = useState('');
+  const [bobinaNumber, setBobinaNumber] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +109,8 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
     setDowntimeDescription('');
     setNotes('');
     setAdditionalNotes('');
+    setOpNumber('');
+    setBobinaNumber('');
     setError(null);
   };
 
@@ -151,6 +155,10 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
       }
     }
 
+    const finalNotes = opNumber.trim()
+      ? `[OP: ${opNumber.trim()}${bobinaNumber.trim() ? ` - Bobina ${bobinaNumber.trim()}` : ''}] ${notes.trim()}`.trim()
+      : notes.trim();
+
     setSubmitting(true);
     try {
       const res = await api.createProductionRecord({
@@ -169,7 +177,7 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
         total_downtime_minutes: hasDowntime ? Number(downtimeMinutes) : 0,
         downtime_reason: hasDowntime ? finalReason : undefined,
         downtime_description: hasDowntime ? downtimeDescription : undefined,
-        notes,
+        notes: finalNotes,
         additional_notes: additionalNotes,
       });
 
@@ -375,6 +383,34 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
                 ))}
               </select>
             </div>
+
+            <div>
+              <label htmlFor="prod-op" className="block text-sm font-medium text-slate-700 mb-1.5">
+                Nº da Ordem de Produção (OP)
+              </label>
+              <input
+                id="prod-op"
+                type="text"
+                placeholder="Ex.: 11344"
+                value={opNumber}
+                onChange={(e) => setOpNumber(e.target.value)}
+                className="w-full min-h-[46px] px-3.5 py-2.5 text-sm font-mono bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="prod-bobina" className="block text-sm font-medium text-slate-700 mb-1.5">
+                Identificador / Bobina (Iniflex)
+              </label>
+              <input
+                id="prod-bobina"
+                type="text"
+                placeholder="Ex.: 1, 2, Bobina 03"
+                value={bobinaNumber}
+                onChange={(e) => setBobinaNumber(e.target.value)}
+                className="w-full min-h-[46px] px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
+              />
+            </div>
           </div>
         </section>
 
@@ -466,9 +502,10 @@ export function ProductionForm({ catalog, onRecordSaved }: ProductionFormProps) 
                 onChange={(e) => setUnitOfMeasure(e.target.value)}
                 className="w-full min-h-[48px] px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"
               >
-                <option value="kg">kg (Quilogramas)</option>
+                <option value="kg">kg (Quilogramas / Peso Líquido)</option>
+                <option value="mil">mil (Milheiros de Sacos)</option>
+                <option value="mt">mt (Metros Lineares de Filme)</option>
                 <option value="un">un (Unidades)</option>
-                <option value="m">m (Metros)</option>
                 <option value="bob">bob (Bobinas)</option>
                 <option value="cx">cx (Caixas)</option>
               </select>
